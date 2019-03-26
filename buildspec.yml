@@ -13,8 +13,8 @@ phases:
     commands:
       - dotnet build ExampleProject.sln -c Release
 
-      - dotnet test ./LambdaFunction/test/ExampleProject.LambdaFunction.UnitTests -c Release --no-build
-      - mv ./LambdaFunction/test/ExampleProject.LambdaFunction.UnitTests/bin/Release/netcoreapp2.1/BDDfy.html ./LambdaFunction-Unit-Tests.html
+      - dotnet test ./LambdaFunction/test/LambdaFunction.UnitTests -c Release --no-build
+      - mv ./LambdaFunction/test/LambdaFunction.UnitTests/bin/Release/netcoreapp2.1/BDDfy.html ./LambdaFunction-Unit-Tests.html
 
       - lambda_file_name=lambda-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
 

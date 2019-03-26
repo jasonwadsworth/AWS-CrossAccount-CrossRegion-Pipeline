@@ -35,7 +35,7 @@ artifacts:
     - lambda-configuration.json
   name: $file_name
   secondary-artifacts:
-    Api:
+    LambdaFunction:
       base-directory: "publish/api"
       files:
         - "**/*"

@@ -11,7 +11,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LambdaFunction", "LambdaFun
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "test", "test", "{96FB9758-0A5D-4A9E-B462-B7D7F70D829C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LambdaFunction.UnitTests", "LambdaFunction\test\LambdaFunction\LambdaFunction.csproj", "{C02BFA4F-2BE4-4692-9FBD-9D5EF68BAC64}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LambdaFunction.UnitTests", "LambdaFunction\test\LambdaFunction.UnitTests\LambdaFunction.UnitTests.csproj", "{C02BFA4F-2BE4-4692-9FBD-9D5EF68BAC64}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

@@ -22,7 +22,7 @@ namespace LambdaFunction.UnitTests.Controllers.HelloController
             this
             .Given(() =>
             {
-                logger = new Mock<ILogger<Api.Controllers.HelloController>>();
+                logger = new Mock<ILogger<LambdaFunction.Controllers.HelloController>>();
             }, "a mocked logger")
                 .And(() =>
                 {

@@ -16,6 +16,9 @@ phases:
       - dotnet test ./LambdaFunction/test/LambdaFunction.UnitTests -c Release --no-build
       - mv ./LambdaFunction/test/LambdaFunction.UnitTests/bin/Release/netcoreapp2.1/BDDfy.html ./LambdaFunction-Unit-Tests.html
 
+      - dotnet publish ./LambdaFunction/src/LambdaFunction/ --no-build -c Release -o ../../../publish/api
+      - mv ./publish/lambda/deploy.template ./lambda-deploy.template
+
       - lambda_file_name=lambda-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
 
       - 'echo "{ \"Parameters\": { \"FileName\": \"${lambda_file_name}\" } }" > lambda-configuration.json'
@@ -36,7 +39,7 @@ artifacts:
   name: $file_name
   secondary-artifacts:
     LambdaFunction:
-      base-directory: "publish/api"
+      base-directory: "publish/lambda"
       files:
         - "**/*"
       name: $lambda_file_name

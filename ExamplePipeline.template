@@ -1,0 +1,1093 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Continuous integration project for AccessControl",
+    "Parameters": {
+        "GitHubUrl": {
+            "Description": "The HTTPS URL for GitHub for the project",
+            "Type": "String"
+        },
+        "BuildAccount": {
+            "Description": "AWS AccountNumber for the build account",
+            "Type": "Number"
+        },
+        "BuildRegion": {
+            "Description": "AWS Region of the builds",
+            "Type": "String"
+        },
+        "BuildRegionS3Bucket": {
+            "Description": "The S3 bucket used for the region of the builds",
+            "Type": "String"
+        },
+        "BuildRegionCMK": {
+            "Description": "The customer master key to use for the region of the builds",
+            "Type": "String"
+        },
+        "DevelopmentAccount": {
+            "Description": "AWS AccountNumber for the development account",
+            "Type": "Number"
+        },
+        "DevelopmentRegion": {
+            "Description": "AWS Region of development",
+            "Type": "String"
+        },
+        "DevelopmentRegionS3Bucket": {
+            "Description": "The S3 bucket used for the region of development",
+            "Type": "String"
+        },
+        "DevelopmentRegionCMK": {
+            "Description": "The customer master key to use for the region of development",
+            "Type": "String"
+        },
+        "TestingAccount": {
+            "Description": "AWS AccountNumber for the testing account",
+            "Type": "Number"
+        },
+        "TestingRegion": {
+            "Description": "AWS Region of testing",
+            "Type": "String"
+        },
+        "TestingRegionS3Bucket": {
+            "Description": "The S3 bucket used for the region of testing",
+            "Type": "String"
+        },
+        "TestingRegionCMK": {
+            "Description": "The customer master key to use for the region of testing",
+            "Type": "String"
+        },
+        "ProductionAccount": {
+            "Description": "AWS AccountNumber for the production account",
+            "Type": "Number"
+        },
+        "ProductionRegion": {
+            "Description": "AWS Region of production",
+            "Type": "String"
+        },
+        "ProductionRegionS3Bucket": {
+            "Description": "The S3 bucket used for the region of production",
+            "Type": "String"
+        },
+        "ProductionRegionCMK": {
+            "Description": "The customer master key to use for the region of production",
+            "Type": "String"
+        }
+    },
+    "Conditions": {
+        "CreateDevelopmentRegionResources": {
+            "Fn::Not": [
+                {
+                    "Fn::Equals": [
+                        {
+                            "Ref": "BuildRegion"
+                        },
+                        {
+                            "Ref": "DevelopmentRegion"
+                        }
+                    ]
+                }
+            ]
+        },
+        "CreateTestingRegionResources": {
+            "Fn::And": [
+                {
+                    "Fn::Not": [
+                        {
+                            "Fn::Equals": [
+                                {
+                                    "Ref": "BuildRegion"
+                                },
+                                {
+                                    "Ref": "TestingRegion"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "Fn::Not": [
+                        {
+                            "Fn::Equals": [
+                                {
+                                    "Ref": "DevelopmentRegion"
+                                },
+                                {
+                                    "Ref": "TestingRegion"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        "CreateProductionRegionResources": {
+            "Fn::And": [
+                {
+                    "Fn::Not": [
+                        {
+                            "Fn::Equals": [
+                                {
+                                    "Ref": "BuildRegion"
+                                },
+                                {
+                                    "Ref": "ProductionRegion"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "Fn::Not": [
+                        {
+                            "Fn::Equals": [
+                                {
+                                    "Ref": "DevelopmentRegion"
+                                },
+                                {
+                                    "Ref": "ProductionRegion"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "Fn::Not": [
+                        {
+                            "Fn::Equals": [
+                                {
+                                    "Ref": "TestingRegion"
+                                },
+                                {
+                                    "Ref": "ProductionRegion"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }
+    },
+    "Resources": {
+        "CodeBuildRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "ExampleProject-CodeBuild",
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "codebuild.amazonaws.com"
+                            }
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "CodeBuildPolicy"
+                    }
+                ]
+            }
+        },
+        "CodeBuildPolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Description": "Policy for ExampleProject CodeBuild project",
+            "Properties": {
+                "ManagedPolicyName": "ExampleProject-CodeBuild",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": [
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ExampleProject*"
+                                }
+                            ],
+                            "Effect": "Allow"
+                        },
+                        {
+                            "Action": [
+                                "s3:PutObject",
+                                "s3:GetObject",
+                                "s3:GetObjectVersion"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}/*"
+                                }
+                            ],
+                            "Effect": "Allow"
+                        }
+                    ]
+                }
+            }
+        },
+        "CodeBuildProject": {
+            "Type": "AWS::CodeBuild::Project",
+            "Properties": {
+                "Description": "Continuous integration build for ExampleProject",
+                "Name": {
+                    "Fn::Sub": "ExampleProject"
+                },
+                "Artifacts": {
+                    "Type": "S3",
+                    "Packaging": "zip",
+                    "Location": {
+                        "Ref": "BuildRegionS3Bucket"
+                    },
+                    "Name": "ExampleProject.zip",
+                    "OverrideArtifactName": true,
+                    "Path": "ExampleProject"
+                },
+                "SecondaryArtifacts": [
+                    {
+                        "ArtifactIdentifier": "LambdaFunction",
+                        "Type": "S3",
+                        "Packaging": "zip",
+                        "Location": {
+                            "Ref": "BuildRegionS3Bucket"
+                        },
+                        "Name": "ExampleProject.LambdaFunction.zip",
+                        "OverrideArtifactName": true,
+                        "Path": "ExampleProject/LambdaFunction"
+                    }
+                ],
+                "ServiceRole": {
+                    "Ref": "CodeBuildRole"
+                },
+                "Environment": {
+                    "Type": "LINUX_CONTAINER",
+                    "Image": "aws/codebuild/dot-net:core-2.1",
+                    "PrivilegedMode": true,
+                    "ComputeType": "BUILD_GENERAL1_SMALL"
+                },
+                "Triggers": {
+                    "Webhook": true,
+                    "FilterGroups": [
+                        [
+                            {
+                                "Type": "EVENT",
+                                "Pattern": "PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED"
+                            },
+                            {
+                                "Type": "BASE_REF",
+                                "Pattern": "^refs/heads/master$"
+                            }
+                        ],
+                        [
+                            {
+                                "Type": "EVENT",
+                                "Pattern": "PUSH"
+                            },
+                            {
+                                "Type": "HEAD_REF",
+                                "Pattern": "^refs/heads/master$"
+                            }
+                        ]
+                    ]
+                },
+                "Source": {
+                    "Auth": {
+                        "Type": "OAUTH"
+                    },
+                    "Type": "GITHUB",
+                    "BuildSpec": "buildspec.yml",
+                    "Location": {
+                        "Ref": "GitHubUrl"
+                    },
+                    "ReportBuildStatus": true
+                }
+            }
+        },
+        "CodePipelineRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "ExampleProject-CodePipeline",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Ref": "BuildAccount"
+                                }
+                            },
+                            "Action": "sts:AssumeRole"
+                        },
+                        {
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "codepipeline.amazonaws.com"
+                            }
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "CodePipelinePolicy"
+                    }
+                ]
+            }
+        },
+        "CodePipelinePolicy": {
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Description": "Policy for ExampleProject CodePipeline",
+            "Properties": {
+                "ManagedPolicyName": "ExampleProject-CodePipeline",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": [
+                                "codepipeline:*",
+                                "iam:ListRoles",
+                                "cloudformation:Describe*",
+                                "cloudFormation:List*",
+                                "codebuild:BatchGetBuilds",
+                                "codebuild:StartBuild",
+                                "cloudformation:CreateStack",
+                                "cloudformation:DeleteStack",
+                                "cloudformation:DescribeStacks",
+                                "cloudformation:UpdateStack",
+                                "cloudformation:CreateChangeSet",
+                                "cloudformation:DeleteChangeSet",
+                                "cloudformation:DescribeChangeSet",
+                                "cloudformation:ExecuteChangeSet",
+                                "cloudformation:SetStackPolicy",
+                                "cloudformation:ValidateTemplate",
+                                "iam:PassRole",
+                                "s3:ListAllMyBuckets",
+                                "s3:GetBucketLocation"
+                            ],
+                            "Resource": "*",
+                            "Effect": "Allow"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": "kms:Decrypt",
+                            "Resource": [
+                                {
+                                    "Ref": "BuildRegionCMK"
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateDevelopmentRegionResources",
+                                        {
+                                            "Ref": "DevelopmentRegionCMK"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateTestingRegionResources",
+                                        {
+                                            "Ref": "TestingRegionCMK"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateProductionRegionResources",
+                                        {
+                                            "Ref": "ProductionRegionCMK"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "s3:GetBucketPolicy",
+                                "s3:ListBucket",
+                                "s3:GetObject",
+                                "s3:PutObject"
+                            ],
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}/*"
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateDevelopmentRegionResources",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateDevelopmentRegionResources",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}/*"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateTestingRegionResources",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateTestingRegionResources",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateProductionRegionResources",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::If": [
+                                        "CreateProductionRegionResources",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
+                                }
+                            ],
+                            "Effect": "Allow"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": "sts:AssumeRole",
+                            "Resource": [
+                                {
+                                    "Fn::GetAtt": [
+                                        "PipelineSourceRole",
+                                        "Arn"
+                                    ]
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "PipelineSourceRole": {
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "ExampleProject-PipelineSource",
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": "sts:AssumeRole",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Ref": "AWS::AccountId"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "PipelineSourcePolicy": {
+            "Type": "AWS::IAM::Policy",
+            "Properties": {
+                "PolicyName": {
+                    "Fn::Sub": "ExampleProject-PipelineSource"
+                },
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Action": [
+                                "s3:*"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Action": "kms:*",
+                            "Resource": [
+                                {
+                                    "Ref": "BuildRegionCMK"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "Roles": [
+                    {
+                        "Ref": "PipelineSourceRole"
+                    }
+                ]
+            }
+        },
+        "Pipeline": {
+            "Type": "AWS::CodePipeline::Pipeline",
+            "Description": "Pipeline for ExampleProject",
+            "Properties": {
+                "Name": "ExampleProject",
+                "RoleArn": {
+                    "Fn::GetAtt": [
+                        "CodePipelineRole",
+                        "Arn"
+                    ]
+                },
+                "ArtifactStores": [
+                    {
+                        "ArtifactStore": {
+                            "Location": {
+                                "Ref": "BuildRegionS3Bucket"
+                            },
+                            "Type": "S3",
+                            "EncryptionKey": {
+                                "Id": {
+                                    "Ref": "BuildRegionCMK"
+                                },
+                                "Type": "KMS"
+                            }
+                        },
+                        "Region": {
+                            "Ref": "BuildRegion"
+                        }
+                    },
+                    {
+                        "Fn::If": [
+                            "CreateDevelopmentRegionResources",
+                            {
+                                "ArtifactStore": {
+                                    "Location": {
+                                        "Ref": "DevelopmentRegionS3Bucket"
+                                    },
+                                    "Type": "S3",
+                                    "EncryptionKey": {
+                                        "Id": {
+                                            "Ref": "DevelopmentRegionCMK"
+                                        },
+                                        "Type": "KMS"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "DevelopmentRegion"
+                                }
+                            },
+                            {
+                                "Ref": "AWS::NoValue"
+                            }
+                        ]
+                    },
+                    {
+                        "Fn::If": [
+                            "CreateTestingRegionResources",
+                            {
+                                "ArtifactStore": {
+                                    "Location": {
+                                        "Ref": "TestingRegionS3Bucket"
+                                    },
+                                    "Type": "S3",
+                                    "EncryptionKey": {
+                                        "Id": {
+                                            "Ref": "TestingRegionCMK"
+                                        },
+                                        "Type": "KMS"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "TestingRegion"
+                                }
+                            },
+                            {
+                                "Ref": "AWS::NoValue"
+                            }
+                        ]
+                    },
+                    {
+                        "Fn::If": [
+                            "CreateProductionRegionResources",
+                            {
+                                "ArtifactStore": {
+                                    "Location": {
+                                        "Ref": "ProductionRegionS3Bucket"
+                                    },
+                                    "Type": "S3",
+                                    "EncryptionKey": {
+                                        "Id": {
+                                            "Ref": "ProductionRegionCMK"
+                                        },
+                                        "Type": "KMS"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "ProductionRegion"
+                                }
+                            },
+                            {
+                                "Ref": "AWS::NoValue"
+                            }
+                        ]
+                    }
+                ],
+                "Stages": [
+                    {
+                        "Name": "Source",
+                        "Actions": [
+                            {
+                                "Name": "Source",
+                                "ActionTypeId": {
+                                    "Category": "Source",
+                                    "Owner": "AWS",
+                                    "Provider": "S3",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "S3Bucket": {
+                                        "Ref": "BuildRegionS3Bucket"
+                                    },
+                                    "S3ObjectKey": "ExampleProject/ExampleProject.zip",
+                                    "PollForSourceChanges": "true"
+                                },
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "RoleArn": {
+                                    "Fn::GetAtt": [
+                                        "PipelineSourceRole",
+                                        "Arn"
+                                    ]
+                                },
+                                "RunOrder": 1
+                            }
+                        ]
+                    },
+                    {
+                        "Name": "Deploy-Development",
+                        "Actions": [
+                            {
+                                "Name": "CreatePrimaryChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_REPLACE",
+                                    "StackName": "ExampleProject",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "TemplatePath": "BuildOutput::ExampleProject.template",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Region": {
+                                    "Ref": "DevelopmentRegion"
+                                },
+                                "RunOrder": 1,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "ExecutePrimaryChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_EXECUTE",
+                                    "StackName": "ExampleProject",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "DevelopmentRegion"
+                                },
+                                "RunOrder": 2,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "CreateLambdaChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_REPLACE",
+                                    "StackName": "ExampleProject-LambdaFunction",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "TemplatePath": "BuildOutput::lambda-deploy.template",
+                                    "TemplateConfiguration": "BuildOutput::lambda-configuration.json",
+                                    "ParameterOverrides": {
+                                        "Fn::Sub": "{\"S3Bucket\": \"${DevelopmentRegionS3Bucket}\" }"
+                                    },
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Region": {
+                                    "Ref": "DevelopmentRegion"
+                                },
+                                "RunOrder": 1,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "ExecuteLambdaChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_EXECUTE",
+                                    "StackName": "ExampleProject-LambdaFunction",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "DevelopmentRegion"
+                                },
+                                "RunOrder": 2,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "Name": "Deploy-Testing",
+                        "Actions": [
+                            {
+                                "Name": "CreatePrimaryChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_REPLACE",
+                                    "StackName": "ExampleProject",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "TemplatePath": "BuildOutput::ExampleProject.template",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Region": {
+                                    "Ref": "TestingRegion"
+                                },
+                                "RunOrder": 1,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "ExecutePrimaryChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_EXECUTE",
+                                    "StackName": "ExampleProject",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "TestingRegion"
+                                },
+                                "RunOrder": 2,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "CreateLambdaChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_REPLACE",
+                                    "StackName": "ExampleProject-LambdaFunction",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "TemplateConfiguration": "BuildOutput::lambda-configuration.json",
+                                    "TemplatePath": "BuildOutput::lambda-deploy.template",
+                                    "ParameterOverrides": {
+                                        "Fn::Sub": "{\"S3Bucket\": \"${TestingRegionS3Bucket}\" }"
+                                    },
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Region": {
+                                    "Ref": "TestingRegion"
+                                },
+                                "RunOrder": 1,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "ExecuteLambdaChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_EXECUTE",
+                                    "StackName": "ExampleProject-LambdaFunction",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "TestingRegion"
+                                },
+                                "RunOrder": 2,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            }
+                        ]
+                    },
+                    {
+                        "Name": "Deploy-Production",
+                        "Actions": [
+                            {
+                                "Name": "ProductionApproval",
+                                "ActionTypeId": {
+                                    "Category": "Approval",
+                                    "Owner": "AWS",
+                                    "Provider": "Manual",
+                                    "Version": 1
+                                },
+                                "RunOrder": 2
+                            },
+                            {
+                                "Name": "CreatePrimaryChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_REPLACE",
+                                    "StackName": "ExampleProject",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "TemplatePath": "BuildOutput::ExampleProject.template",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Region": {
+                                    "Ref": "ProductionRegion"
+                                },
+                                "RunOrder": 1,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "ExecutePrimaryChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_EXECUTE",
+                                    "StackName": "ExampleProject",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "ProductionRegion"
+                                },
+                                "RunOrder": 3,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "CreateLambdaChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_REPLACE",
+                                    "StackName": "ExampleProject-LambdaFunction",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "TemplateConfiguration": "BuildOutput::lambda-configuration.json",
+                                    "TemplatePath": "BuildOutput::lambda-deploy.template",
+                                    "ParameterOverrides": {
+                                        "Fn::Sub": "{\"S3Bucket\": \"${ProductionRegionS3Bucket}\" }"
+                                    },
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "BuildOutput"
+                                    }
+                                ],
+                                "Region": {
+                                    "Ref": "ProductionRegion"
+                                },
+                                "RunOrder": 1,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            },
+                            {
+                                "Name": "ExecuteLambdaChangeSet",
+                                "ActionTypeId": {
+                                    "Category": "Deploy",
+                                    "Owner": "AWS",
+                                    "Provider": "CloudFormation",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "ChangeSetName": "DeployChangeSet",
+                                    "ActionMode": "CHANGE_SET_EXECUTE",
+                                    "StackName": "ExampleProject-LambdaFunction",
+                                    "Capabilities": "CAPABILITY_NAMED_IAM",
+                                    "RoleArn": {
+                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                    }
+                                },
+                                "Region": {
+                                    "Ref": "ProductionRegion"
+                                },
+                                "RunOrder": 3,
+                                "RoleArn": {
+                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    }
+}

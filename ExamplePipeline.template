@@ -1,6 +1,6 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "Continuous integration project for AccessControl",
+    "Description": "Continuous integration project for ExampleProject",
     "Parameters": {
         "GitHubUrl": {
             "Description": "The HTTPS URL for GitHub for the project",

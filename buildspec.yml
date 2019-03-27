@@ -17,7 +17,6 @@ phases:
       - mv ./LambdaFunction/test/LambdaFunction.UnitTests/bin/Release/netcoreapp2.1/BDDfy.html ./LambdaFunction-Unit-Tests.html
 
       - dotnet publish ./LambdaFunction/src/LambdaFunction/ --no-build -c Release -o ../../../publish/lambda
-      - mv ./publish/lambda/deploy.template ./lambda-deploy.template
 
       - echo $CODEBUILD_WEBHOOK_HEAD_REF
       - lambda_file_name=Lambda-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
@@ -40,6 +39,5 @@ artifacts:
     LambdaFunction:
       base-directory: "publish/lambda"
       files:
-        - lambda-deploy.template
         - "**/*"
       name: $lambda_file_name

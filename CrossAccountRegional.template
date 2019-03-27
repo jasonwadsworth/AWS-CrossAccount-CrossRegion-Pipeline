@@ -43,7 +43,12 @@
                                 "kms:Get*",
                                 "kms:Delete*",
                                 "kms:ScheduleKeyDeletion",
-                                "kms:CancelKeyDeletion"
+                                "kms:CancelKeyDeletion",
+                                "kms:Encrypt",
+                                "kms:Decrypt",
+                                "kms:ReEncrypt*",
+                                "kms:GenerateDataKey*",
+                                "kms:DescribeKey"
                             ],
                             "Resource": "*"
                         },
@@ -84,10 +89,21 @@
         },
         "ArtifactBucket": {
             "Type": "AWS::S3::Bucket",
-            "DeletionPolicy": "Retain",
             "Properties": {
-                "VersioningConfiguration": {
-                    "Status": "Enabled"
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::GetAtt": [
+                                        "KMSKey",
+                                        "Arn"
+                                    ]
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
                 }
             }
         },

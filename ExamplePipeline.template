@@ -10,12 +10,8 @@
             "Description": "AWS AccountNumber for the build account",
             "Type": "Number"
         },
-        "BuildRegion": {
-            "Description": "AWS Region of the builds",
-            "Type": "String"
-        },
-        "BuildRegionS3Bucket": {
-            "Description": "The S3 bucket used for the region of the builds",
+        "BuildBucket": {
+            "Description": "The S3 bucket used for the builds",
             "Type": "String"
         },
         "BuildRegionCMK": {
@@ -72,47 +68,15 @@
         }
     },
     "Conditions": {
-        "CreateDevelopmentRegionResources": {
+        "CreateTestingRegionResources": {
             "Fn::Not": [
                 {
                     "Fn::Equals": [
                         {
-                            "Ref": "BuildRegion"
+                            "Ref": "DevelopmentRegion"
                         },
                         {
-                            "Ref": "DevelopmentRegion"
-                        }
-                    ]
-                }
-            ]
-        },
-        "CreateTestingRegionResources": {
-            "Fn::And": [
-                {
-                    "Fn::Not": [
-                        {
-                            "Fn::Equals": [
-                                {
-                                    "Ref": "BuildRegion"
-                                },
-                                {
-                                    "Ref": "TestingRegion"
-                                }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    "Fn::Not": [
-                        {
-                            "Fn::Equals": [
-                                {
-                                    "Ref": "DevelopmentRegion"
-                                },
-                                {
-                                    "Ref": "TestingRegion"
-                                }
-                            ]
+                            "Ref": "TestingRegion"
                         }
                     ]
                 }
@@ -120,20 +84,6 @@
         },
         "CreateProductionRegionResources": {
             "Fn::And": [
-                {
-                    "Fn::Not": [
-                        {
-                            "Fn::Equals": [
-                                {
-                                    "Ref": "BuildRegion"
-                                },
-                                {
-                                    "Ref": "ProductionRegion"
-                                }
-                            ]
-                        }
-                    ]
-                },
                 {
                     "Fn::Not": [
                         {
@@ -217,10 +167,10 @@
                             ],
                             "Resource": [
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}"
+                                    "Fn::Sub": "arn:aws:s3:::${BuildBucket}"
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}/*"
+                                    "Fn::Sub": "arn:aws:s3:::${BuildBucket}/*"
                                 }
                             ],
                             "Effect": "Allow"
@@ -240,7 +190,7 @@
                     "Type": "S3",
                     "Packaging": "zip",
                     "Location": {
-                        "Ref": "BuildRegionS3Bucket"
+                        "Ref": "BuildBucket"
                     },
                     "Name": "ExampleProject.zip",
                     "OverrideArtifactName": true,
@@ -252,7 +202,7 @@
                         "Type": "S3",
                         "Packaging": "zip",
                         "Location": {
-                            "Ref": "BuildRegionS3Bucket"
+                            "Ref": "BuildBucket"
                         },
                         "Name": "ExampleProject.LambdaFunction.zip",
                         "OverrideArtifactName": true,
@@ -373,43 +323,37 @@
                         },
                         {
                             "Effect": "Allow",
-                            "Action": "kms:Decrypt",
+                            "Action": [
+                                "kms:Decrypt"
+                            ],
                             "Resource": [
                                 {
                                     "Ref": "BuildRegionCMK"
                                 },
                                 {
-                                    "Fn::If": [
-                                        "CreateDevelopmentRegionResources",
-                                        {
-                                            "Ref": "DevelopmentRegionCMK"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
+                                    "Ref": "DevelopmentRegionCMK"
                                 },
                                 {
-                                    "Fn::If": [
-                                        "CreateTestingRegionResources",
-                                        {
-                                            "Ref": "TestingRegionCMK"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
+                                    "Ref": "TestingRegionCMK"
                                 },
                                 {
-                                    "Fn::If": [
-                                        "CreateProductionRegionResources",
-                                        {
-                                            "Ref": "ProductionRegionCMK"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
+                                    "Ref": "ProductionRegionCMK"
+                                }
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "s3:GetBucketPolicy",
+                                "s3:ListBucket",
+                                "s3:GetObject"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildBucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildBucket}/*"
                                 }
                             ]
                         },
@@ -420,81 +364,49 @@
                                 "s3:GetObject",
                                 "s3:PutObject"
                             ],
+                            "Effect": "Allow",
                             "Resource": [
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}"
+                                    "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}"
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${BuildRegionS3Bucket}/*"
-                                },
-                                {
-                                    "Fn::If": [
-                                        "CreateDevelopmentRegionResources",
-                                        {
-                                            "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
-                                },
-                                {
-                                    "Fn::If": [
-                                        "CreateDevelopmentRegionResources",
-                                        {
-                                            "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}/*"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
-                                },
-                                {
-                                    "Fn::If": [
-                                        "CreateTestingRegionResources",
-                                        {
-                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
-                                },
-                                {
-                                    "Fn::If": [
-                                        "CreateTestingRegionResources",
-                                        {
-                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
-                                },
-                                {
-                                    "Fn::If": [
-                                        "CreateProductionRegionResources",
-                                        {
-                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
-                                },
-                                {
-                                    "Fn::If": [
-                                        "CreateProductionRegionResources",
-                                        {
-                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
-                                        },
-                                        {
-                                            "Ref": "AWS::NoValue"
-                                        }
-                                    ]
+                                    "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}/*"
                                 }
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "s3:GetBucketPolicy",
+                                "s3:ListBucket",
+                                "s3:GetObject",
+                                "s3:PutObject"
                             ],
-                            "Effect": "Allow"
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
+                                }
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "s3:GetBucketPolicy",
+                                "s3:ListBucket",
+                                "s3:GetObject",
+                                "s3:PutObject"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
+                                }
+                            ]
                         },
                         {
                             "Effect": "Allow",
@@ -537,13 +449,18 @@
                             }
                         }
                     ]
-                }
+                },
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "PipelineSourcePolicy"
+                    }
+                ]
             }
         },
         "PipelineSourcePolicy": {
-            "Type": "AWS::IAM::Policy",
+            "Type": "AWS::IAM::ManagedPolicy",
             "Properties": {
-                "PolicyName": {
+                "ManagedPolicyName": {
                     "Fn::Sub": "ExampleProject-PipelineSource"
                 },
                 "PolicyDocument": {
@@ -554,24 +471,55 @@
                             "Action": [
                                 "s3:*"
                             ],
-                            "Resource": "*"
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildBucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${BuildBucket}/*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}/*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
+                                }
+                            ]
                         },
                         {
                             "Effect": "Allow",
-                            "Action": "kms:*",
+                            "Action": [
+                                "kms:*"
+                            ],
                             "Resource": [
                                 {
                                     "Ref": "BuildRegionCMK"
+                                },
+                                {
+                                    "Ref": "DevelopmentRegionCMK"
+                                },
+                                {
+                                    "Ref": "TestingRegionCMK"
+                                },
+                                {
+                                    "Ref": "ProductionRegionCMK"
                                 }
                             ]
                         }
                     ]
-                },
-                "Roles": [
-                    {
-                        "Ref": "PipelineSourceRole"
-                    }
-                ]
+                }
             }
         },
         "Pipeline": {
@@ -589,44 +537,19 @@
                     {
                         "ArtifactStore": {
                             "Location": {
-                                "Ref": "BuildRegionS3Bucket"
+                                "Ref": "DevelopmentRegionS3Bucket"
                             },
                             "Type": "S3",
                             "EncryptionKey": {
                                 "Id": {
-                                    "Ref": "BuildRegionCMK"
+                                    "Ref": "DevelopmentRegionCMK"
                                 },
                                 "Type": "KMS"
                             }
                         },
                         "Region": {
-                            "Ref": "BuildRegion"
+                            "Ref": "DevelopmentRegion"
                         }
-                    },
-                    {
-                        "Fn::If": [
-                            "CreateDevelopmentRegionResources",
-                            {
-                                "ArtifactStore": {
-                                    "Location": {
-                                        "Ref": "DevelopmentRegionS3Bucket"
-                                    },
-                                    "Type": "S3",
-                                    "EncryptionKey": {
-                                        "Id": {
-                                            "Ref": "DevelopmentRegionCMK"
-                                        },
-                                        "Type": "KMS"
-                                    }
-                                },
-                                "Region": {
-                                    "Ref": "DevelopmentRegion"
-                                }
-                            },
-                            {
-                                "Ref": "AWS::NoValue"
-                            }
-                        ]
                     },
                     {
                         "Fn::If": [
@@ -684,7 +607,7 @@
                         "Name": "Source",
                         "Actions": [
                             {
-                                "Name": "Source",
+                                "Name": "PrimarySource",
                                 "ActionTypeId": {
                                     "Category": "Source",
                                     "Owner": "AWS",
@@ -693,14 +616,42 @@
                                 },
                                 "Configuration": {
                                     "S3Bucket": {
-                                        "Ref": "BuildRegionS3Bucket"
+                                        "Ref": "BuildBucket"
                                     },
                                     "S3ObjectKey": "ExampleProject/ExampleProject.zip",
                                     "PollForSourceChanges": "true"
                                 },
                                 "OutputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "PrimaryOutput"
+                                    }
+                                ],
+                                "RoleArn": {
+                                    "Fn::GetAtt": [
+                                        "PipelineSourceRole",
+                                        "Arn"
+                                    ]
+                                },
+                                "RunOrder": 1
+                            },
+                            {
+                                "Name": "LambdaSource",
+                                "ActionTypeId": {
+                                    "Category": "Source",
+                                    "Owner": "AWS",
+                                    "Provider": "S3",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "S3Bucket": {
+                                        "Ref": "BuildBucket"
+                                    },
+                                    "S3ObjectKey": "ExampleProject/LambdaFunction/Lambda.zip",
+                                    "PollForSourceChanges": "true"
+                                },
+                                "OutputArtifacts": [
+                                    {
+                                        "Name": "LambdaOutput"
                                     }
                                 ],
                                 "RoleArn": {
@@ -729,14 +680,14 @@
                                     "ActionMode": "CHANGE_SET_REPLACE",
                                     "StackName": "ExampleProject",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "BuildOutput::ExampleProject.template",
+                                    "TemplatePath": "PrimaryOutput::ExampleProject.template",
                                     "RoleArn": {
                                         "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation"
                                     }
                                 },
                                 "InputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "PrimaryOutput"
                                     }
                                 ],
                                 "Region": {
@@ -785,18 +736,15 @@
                                     "ActionMode": "CHANGE_SET_REPLACE",
                                     "StackName": "ExampleProject-LambdaFunction",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "BuildOutput::lambda-deploy.template",
-                                    "TemplateConfiguration": "BuildOutput::lambda-configuration.json",
-                                    "ParameterOverrides": {
-                                        "Fn::Sub": "{\"S3Bucket\": \"${DevelopmentRegionS3Bucket}\" }"
-                                    },
+                                    "TemplatePath": "LambdaOutput::deploy.template",
+                                    "ParameterOverrides": "{ \"BucketName\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"BucketName\" ] }, \"ObjectKey\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"ObjectKey\" ] } }",
                                     "RoleArn": {
                                         "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation"
                                     }
                                 },
                                 "InputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "LambdaOutput"
                                     }
                                 ],
                                 "Region": {
@@ -850,14 +798,14 @@
                                     "ActionMode": "CHANGE_SET_REPLACE",
                                     "StackName": "ExampleProject",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "BuildOutput::ExampleProject.template",
+                                    "TemplatePath": "PrimaryOutput::ExampleProject.template",
                                     "RoleArn": {
                                         "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
                                     }
                                 },
                                 "InputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "PrimaryOutput"
                                     }
                                 ],
                                 "Region": {
@@ -906,18 +854,15 @@
                                     "ActionMode": "CHANGE_SET_REPLACE",
                                     "StackName": "ExampleProject-LambdaFunction",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplateConfiguration": "BuildOutput::lambda-configuration.json",
-                                    "TemplatePath": "BuildOutput::lambda-deploy.template",
-                                    "ParameterOverrides": {
-                                        "Fn::Sub": "{\"S3Bucket\": \"${TestingRegionS3Bucket}\" }"
-                                    },
+                                    "TemplatePath": "LambdaOutput::deploy.template",
+                                    "ParameterOverrides": "{ \"BucketName\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"BucketName\" ] }, \"ObjectKey\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"ObjectKey\" ] } }",
                                     "RoleArn": {
                                         "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
                                     }
                                 },
                                 "InputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "LambdaOutput"
                                     }
                                 ],
                                 "Region": {
@@ -981,14 +926,14 @@
                                     "ActionMode": "CHANGE_SET_REPLACE",
                                     "StackName": "ExampleProject",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "BuildOutput::ExampleProject.template",
+                                    "TemplatePath": "PrimaryOutput::ExampleProject.template",
                                     "RoleArn": {
                                         "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
                                     }
                                 },
                                 "InputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "PrimaryOutput"
                                     }
                                 ],
                                 "Region": {
@@ -1037,18 +982,15 @@
                                     "ActionMode": "CHANGE_SET_REPLACE",
                                     "StackName": "ExampleProject-LambdaFunction",
                                     "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplateConfiguration": "BuildOutput::lambda-configuration.json",
-                                    "TemplatePath": "BuildOutput::lambda-deploy.template",
-                                    "ParameterOverrides": {
-                                        "Fn::Sub": "{\"S3Bucket\": \"${ProductionRegionS3Bucket}\" }"
-                                    },
+                                    "TemplatePath": "LambdaOutput::deploy.template",
+                                    "ParameterOverrides": "{ \"BucketName\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"BucketName\" ] }, \"ObjectKey\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"ObjectKey\" ] } }",
                                     "RoleArn": {
                                         "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
                                     }
                                 },
                                 "InputArtifacts": [
                                     {
-                                        "Name": "BuildOutput"
+                                        "Name": "LambdaOutput"
                                     }
                                 ],
                                 "Region": {

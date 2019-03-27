@@ -3,7 +3,7 @@
     "Description": "Creates a CMK in KMS and grants access to other accounts",
     "Parameters": {
         "RootAccountArns": {
-            "Description": "A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::${AccountId}:root). This should include the build account.",
+            "Description": "A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::DeployAccountId:root).",
             "Type": "String"
         },
         "DeployReady": {
@@ -15,49 +15,32 @@
                 "false"
             ]
         },
-        "ArtifactBucketAccessRoleArns": {
-            "Description": "A comma separated list of ARNs representing the roles for that should have access to the artifact bucket. This typically includes the 'CrossAccountCodePipelineCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCodePipelineCloudFormation) and 'CrossAccountCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation) roles. May include the 'CrossAccountPipelineS3Replication' from the 'real' build account if this is a private stack.",
+        "PipelineBucketFromThisStack": {
+            "Description": "The pipeline S3 bucket that is created by this stack.",
             "Type": "String"
         },
-        "BuildS3Bucket": {
-            "Description": "The S3 bucket that is created by this stack. This is only used if there is going to be bucket replication, and is a parameter in order to allow a policy to be created for replication and used by the bucket.",
+        "PipelineBucketAccessRoleArns": {
+            "Description": "A comma separated list of ARNs representing the roles for that should have access to the pipeline bucket. This typically includes the 'CrossAccountCodePipelineCloudFormation' (arn:aws:iam::DeployAccountId:role/CrossAccountCodePipelineCloudFormation) and 'CrossAccountCloudFormation' (arn:aws:iam::DeployAccountId:role/CrossAccountCloudFormation) roles. May include the 'CrossAccountPipelineS3Replication' from the 'real' build account if this is a private stack.",
             "Type": "String"
-        },
-        "Replication": {
-            "Description": "Conditionally configures replication of the S3 bucket.",
-            "Type": "String",
-            "Default": "false",
-            "AllowedValues": [
-                "true",
-                "false"
-            ]
         },
         "ReplicationBucketList": {
             "Type": "String",
-            "Description": "A comma separated list of the replication buckets"
+            "Description": "A comma separated list of the replication buckets for each of the regional stacks."
         },
         "ReplicationBucketStarArns": {
             "Type": "String",
-            "Description": "A comma separated list of the replication bucket ARNs with full wildcard access (arn:aws:s3:::bucketName/*)"
+            "Description": "A comma separated list of the replication bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*), for each of the regional stacks."
         },
         "ReplicationCMKs": {
             "Type": "String",
-            "Description": "A comma separated list of the CMKs for the replication buckets."
+            "Description": "A comma separated list of the CMK ARNS, for the replication buckets, for each of the regional stacks."
         }
     },
     "Conditions": {
-        "AddS3Policy": {
+        "DeployIsReady": {
             "Fn::Equals": [
                 {
                     "Ref": "DeployReady"
-                },
-                "true"
-            ]
-        },
-        "Replicate": {
-            "Fn::Equals": [
-                {
-                    "Ref": "Replication"
                 },
                 "true"
             ]
@@ -95,7 +78,12 @@
                                 "kms:Get*",
                                 "kms:Delete*",
                                 "kms:ScheduleKeyDeletion",
-                                "kms:CancelKeyDeletion"
+                                "kms:CancelKeyDeletion",
+                                "kms:Encrypt",
+                                "kms:Decrypt",
+                                "kms:ReEncrypt*",
+                                "kms:GenerateDataKey*",
+                                "kms:DescribeKey"
                             ],
                             "Resource": "*"
                         },
@@ -134,8 +122,8 @@
             }
         },
         "ReplicationRole": {
+            "Condition": "DeployIsReady",
             "Type": "AWS::IAM::Role",
-            "Condition": "Replicate",
             "Properties": {
                 "RoleName": "CrossAccountPipelineS3Replication",
                 "AssumeRolePolicyDocument": {
@@ -159,8 +147,8 @@
             }
         },
         "ReplicationPolicy": {
+            "Condition": "DeployIsReady",
             "Type": "AWS::IAM::ManagedPolicy",
-            "Condition": "Replicate",
             "Properties": {
                 "ManagedPolicyName": "CrossAccountPipelineS3Replication",
                 "Description": "Policy for replicating S3 data for the cross account pipeline",
@@ -174,7 +162,7 @@
                             "Effect": "Allow",
                             "Resource": [
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${BuildS3Bucket}"
+                                    "Fn::Sub": "arn:aws:s3:::${PipelineBucketFromThisStack}"
                                 }
                             ]
                         },
@@ -185,7 +173,7 @@
                             "Effect": "Allow",
                             "Resource": [
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${BuildS3Bucket}/*"
+                                    "Fn::Sub": "arn:aws:s3:::${PipelineBucketFromThisStack}/*"
                                 }
                             ]
                         },
@@ -205,7 +193,7 @@
                         },
                         {
                             "Action": [
-                                "s3:Put*"
+                                "s3:*"
                             ],
                             "Effect": "Allow",
                             "Resource": {
@@ -219,7 +207,7 @@
                         },
                         {
                             "Action": [
-                                "kms:Encrypt"
+                                "kms:*"
                             ],
                             "Effect": "Allow",
                             "Resource": {
@@ -236,8 +224,8 @@
             }
         },
         "ReplicationFunction": {
+            "Condition": "DeployIsReady",
             "Type": "AWS::Lambda::Function",
-            "Condition": "Replicate",
             "Properties": {
                 "Code": {
                     "ZipFile": {
@@ -280,6 +268,7 @@
                                 "    // The source bucket and source key are part of the event data",
                                 "    var srcBucket = record.s3.bucket.name;",
                                 "    var srcKey = decodeURIComponent(record.s3.object.key.replace(/\\+/g,\" \"));",
+                                "    var srcVersion = record.s3.object.version;",
                                 "",
                                 "    // Modify destKey if an alternate copy location is preferred",
                                 "    var destKey = srcKey;",
@@ -289,7 +278,7 @@
                                 "    s3.copyObject({",
                                 "      Bucket: destBucket,",
                                 "      Key: destKey,",
-                                "      CopySource: encodeURIComponent(srcBucket + '/' + srcKey),",
+                                "      CopySource: encodeURIComponent(srcBucket + '/' + srcKey + (srcVersion ? ('?versionId=' + srcVersion) : '')),",
                                 "      MetadataDirective: 'COPY'",
                                 "    }, (err, data) => {",
                                 "      if (err) {",
@@ -329,8 +318,8 @@
             }
         },
         "ReplicationLambdaPermission": {
+            "Condition": "DeployIsReady",
             "Type": "AWS::Lambda::Permission",
-            "Condition": "Replicate",
             "Properties": {
                 "Action": "lambda:InvokeFunction",
                 "FunctionName": {
@@ -341,20 +330,54 @@
                     "Ref": "AWS::AccountId"
                 },
                 "SourceArn": {
-                    "Fn::Sub": "arn:aws:s3:::${BuildS3Bucket}"
+                    "Fn::Sub": "arn:aws:s3:::${PipelineBucketFromThisStack}"
                 }
             }
         },
-        "ArtifactBucket": {
+        "BuildBucket": {
             "Type": "AWS::S3::Bucket",
-            "DeletionPolicy": "Retain",
             "Properties": {
                 "VersioningConfiguration": {
                     "Status": "Enabled"
                 },
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::GetAtt": [
+                                        "KMSKey",
+                                        "Arn"
+                                    ]
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "PipelineBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::GetAtt": [
+                                        "KMSKey",
+                                        "Arn"
+                                    ]
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                },
                 "NotificationConfiguration": {
                     "Fn::If": [
-                        "Replicate",
+                        "DeployIsReady",
                         {
                             "LambdaConfigurations": [
                                 {
@@ -375,12 +398,12 @@
                 }
             }
         },
-        "S3BucketPolicy": {
-            "Condition": "AddS3Policy",
+        "PipelineBucketPolicy": {
+            "Condition": "DeployIsReady",
             "Type": "AWS::S3::BucketPolicy",
             "Properties": {
                 "Bucket": {
-                    "Ref": "ArtifactBucket"
+                    "Ref": "PipelineBucket"
                 },
                 "PolicyDocument": {
                     "Statement": [
@@ -391,10 +414,10 @@
                             "Effect": "Allow",
                             "Resource": [
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${ArtifactBucket}"
+                                    "Fn::Sub": "arn:aws:s3:::${PipelineBucket}"
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${ArtifactBucket}/*"
+                                    "Fn::Sub": "arn:aws:s3:::${PipelineBucket}/*"
                                 }
                             ],
                             "Principal": {
@@ -402,7 +425,7 @@
                                     "Fn::Split": [
                                         ",",
                                         {
-                                            "Ref": "ArtifactBucketAccessRoleArns"
+                                            "Ref": "PipelineBucketAccessRoleArns"
                                         }
                                     ]
                                 }
@@ -423,10 +446,16 @@
                 ]
             }
         },
-        "ArtifactBucket": {
-            "Description": "The bucket for artifacts",
+        "BuildBucket": {
+            "Description": "The bucket for the builds",
             "Value": {
-                "Ref": "ArtifactBucket"
+                "Ref": "BuildBucket"
+            }
+        },
+        "PipelineBucket": {
+            "Description": "The bucket for the pipeline",
+            "Value": {
+                "Ref": "PipelineBucket"
             }
         }
     }

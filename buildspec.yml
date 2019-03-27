@@ -19,11 +19,12 @@ phases:
       - dotnet publish ./LambdaFunction/src/LambdaFunction/ --no-build -c Release -o ../../../publish/lambda
       - mv ./publish/lambda/deploy.template ./lambda-deploy.template
 
-      - lambda_file_name=lambda-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
-
-      - 'echo "{ \"Parameters\": { \"FileName\": \"${lambda_file_name}\" } }" > lambda-configuration.json'
-
       - echo $CODEBUILD_WEBHOOK_HEAD_REF
+      - lambda_file_name=Lambda-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
+      - if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/master" ] ; then lambda_file_name=Lambda.zip ; fi
+      - if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "" ] ; then lambda_file_name=Lambda.zip ; fi
+      - echo $lambda_file_name
+
       - file_name=ExampleProject-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
       - if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/master" ] ; then file_name=ExampleProject.zip ; fi
       - if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "" ] ; then file_name=ExampleProject.zip ; fi
@@ -33,13 +34,12 @@ artifacts:
   type: zip
   files:
     - ExampleProject.template
-    - lambda-deploy.template
     - LambdaFunction-Unit-Tests.html
-    - lambda-configuration.json
   name: $file_name
   secondary-artifacts:
     LambdaFunction:
       base-directory: "publish/lambda"
       files:
+        - lambda-deploy.template
         - "**/*"
       name: $lambda_file_name

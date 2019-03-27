@@ -2,10 +2,10 @@
     "AWSTemplateFormatVersion": "2010-09-09",
     "Description": "ExampleProject Lambda",
     "Parameters": {
-        "S3Bucket": {
+        "BucketName": {
             "Type": "String"
         },
-        "FileName": {
+        "ObjectKey": {
             "Type": "String"
         }
     },
@@ -17,10 +17,10 @@
                 "FunctionName": "ExampleProject-LambdaFunction",
                 "Code": {
                     "S3Bucket": {
-                        "Ref": "S3Bucket"
+                        "Ref": "BucketName"
                     },
                     "S3Key": {
-                        "Fn::Sub": "ExampleProject/LambdaFunction/${FileName}"
+                        "Ref": "ObjectKey"
                     }
                 },
                 "Handler": "LambdaFunction::LambdaFunction.LambdaEntryPoint::FunctionHandlerAsync",

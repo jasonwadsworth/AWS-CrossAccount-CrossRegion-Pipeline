@@ -6,7 +6,7 @@
             "Description": "A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::${AccountId}:root). This should include the build account.",
             "Type": "String"
         },
-        "ArtifactBucketAccessRoleArns": {
+        "PipelineBucketAccessRoleArns": {
             "Description": "A comma separated list of ARNs representing the roles for that should have access to the artifact bucket. This typically includes the 'CrossAccountCodePipeline' (arn:aws:iam::${AccountId}:role/CrossAccountCodePipeline) and 'CrossAccountCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation) roles.",
             "Type": "String"
         }
@@ -133,7 +133,7 @@
                                     "Fn::Split": [
                                         ",",
                                         {
-                                            "Ref": "ArtifactBucketAccessRoleArns"
+                                            "Ref": "PipelineBucketAccessRoleArns"
                                         }
                                     ]
                                 }

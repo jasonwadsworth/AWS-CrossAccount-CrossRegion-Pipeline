@@ -17,15 +17,18 @@
         },
         "PipelineBucketAccessRoleArns": {
             "Description": "A comma separated list of ARNs representing the roles for that should have access to the pipeline bucket. This typically includes the 'CrossAccountCodePipeline' (arn:aws:iam::DeployAccountId:role/CrossAccountCodePipeline) and 'CrossAccountCloudFormation' (arn:aws:iam::DeployAccountId:role/CrossAccountCloudFormation) roles. May include the 'CrossAccountPipelineS3Replication' from the 'real' build account if this is a private stack.",
-            "Type": "String"
+            "Type": "String",
+            "Default": ""
         },
         "PipelineBucketStarArns": {
             "Type": "String",
-            "Description": "A comma separated list of the pipeline bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*)."
+            "Description": "A comma separated list of the pipeline bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*).",
+            "Default": ""
         },
         "PipelineCMKs": {
             "Type": "String",
-            "Description": "A comma separated list of the pipeline CMK ARNS."
+            "Description": "A comma separated list of the pipeline CMK ARNS.",
+            "Default": ""
         },
         "EnableReplication": {
             "Type": "String",
@@ -38,15 +41,18 @@
         },
         "ReplicationBucketList": {
             "Type": "String",
-            "Description": "A comma separated list of the developer build buckets to replicate to."
+            "Description": "A comma separated list of the developer build buckets to replicate to.",
+            "Default": ""
         },
         "ReplicationBucketStarArns": {
             "Type": "String",
-            "Description": "A comma separated list of the developer build bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*)."
+            "Description": "A comma separated list of the developer build bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*).",
+            "Default": ""
         },
         "ReplicationCMKs": {
             "Type": "String",
-            "Description": "A comma separated list of the developer account CMK ARNS."
+            "Description": "A comma separated list of the developer account CMK ARNS.",
+            "Default": ""
         }
     },
     "Conditions": {

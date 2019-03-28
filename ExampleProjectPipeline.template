@@ -34,6 +34,14 @@
             "Description": "The customer master key to use for the region of development",
             "Type": "String"
         },
+        "DeployToTesting": {
+            "Type": "String",
+            "Default": "true",
+            "AllowedValues": [
+                "true",
+                "false"
+            ]
+        },
         "TestingAccount": {
             "Description": "AWS AccountNumber for the testing account",
             "Type": "Number"
@@ -49,6 +57,14 @@
         "TestingRegionCMK": {
             "Description": "The customer master key to use for the region of testing",
             "Type": "String"
+        },
+        "DeployToProduction": {
+            "Type": "String",
+            "Default": "true",
+            "AllowedValues": [
+                "true",
+                "false"
+            ]
         },
         "ProductionAccount": {
             "Description": "AWS AccountNumber for the production account",
@@ -68,15 +84,43 @@
         }
     },
     "Conditions": {
+        "DeployTesting": {
+            "Fn::Equals": [
+                {
+                    "Ref": "DeployToTesting"
+                },
+                "true"
+            ]
+        },
+        "DeployProduction": {
+            "Fn::Equals": [
+                {
+                    "Ref": "DeployToProduction"
+                },
+                "true"
+            ]
+        },
         "CreateTestingRegionResources": {
-            "Fn::Not": [
+            "Fn::And": [
                 {
                     "Fn::Equals": [
                         {
-                            "Ref": "DevelopmentRegion"
+                            "Ref": "DeployToTesting"
                         },
+                        "true"
+                    ]
+                },
+                {
+                    "Fn::Not": [
                         {
-                            "Ref": "TestingRegion"
+                            "Fn::Equals": [
+                                {
+                                    "Ref": "DevelopmentRegion"
+                                },
+                                {
+                                    "Ref": "TestingRegion"
+                                }
+                            ]
                         }
                     ]
                 }
@@ -84,6 +128,14 @@
         },
         "CreateProductionRegionResources": {
             "Fn::And": [
+                {
+                    "Fn::Equals": [
+                        {
+                            "Ref": "DeployToTesting"
+                        },
+                        "true"
+                    ]
+                },
                 {
                     "Fn::Not": [
                         {
@@ -334,10 +386,26 @@
                                     "Ref": "DevelopmentRegionCMK"
                                 },
                                 {
-                                    "Ref": "TestingRegionCMK"
+                                    "Fn::If": [
+                                        "DeployTesting",
+                                        {
+                                            "Ref": "TestingRegionCMK"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Ref": "ProductionRegionCMK"
+                                    "Fn::If": [
+                                        "DeployProduction",
+                                        {
+                                            "Ref": "ProductionRegionCMK"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 }
                             ]
                         },
@@ -375,36 +443,52 @@
                             ]
                         },
                         {
-                            "Action": [
-                                "s3:GetBucketPolicy",
-                                "s3:ListBucket",
-                                "s3:GetObject",
-                                "s3:PutObject"
-                            ],
-                            "Effect": "Allow",
-                            "Resource": [
+                            "Fn::If": [
+                                "DeployTesting",
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
+                                    "Action": [
+                                        "s3:GetBucketPolicy",
+                                        "s3:ListBucket",
+                                        "s3:GetObject",
+                                        "s3:PutObject"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
+                                    "Ref": "AWS::NoValue"
                                 }
                             ]
                         },
                         {
-                            "Action": [
-                                "s3:GetBucketPolicy",
-                                "s3:ListBucket",
-                                "s3:GetObject",
-                                "s3:PutObject"
-                            ],
-                            "Effect": "Allow",
-                            "Resource": [
+                            "Fn::If": [
+                                "DeployProduction",
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
+                                    "Action": [
+                                        "s3:GetBucketPolicy",
+                                        "s3:ListBucket",
+                                        "s3:GetObject",
+                                        "s3:PutObject"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": [
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
+                                        },
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
+                                    "Ref": "AWS::NoValue"
                                 }
                             ]
                         },
@@ -419,13 +503,29 @@
                                     ]
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline"
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                    "Fn::If": [
+                                        "DeployTesting",
+                                        {
+                                            "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                    "Fn::If": [
+                                        "DeployProduction",
+                                        {
+                                            "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 }
                             ]
                         }
@@ -485,16 +585,48 @@
                                     "Fn::Sub": "arn:aws:s3:::${DevelopmentRegionS3Bucket}/*"
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
+                                    "Fn::If": [
+                                        "DeployTesting",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
+                                    "Fn::If": [
+                                        "DeployTesting",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${TestingRegionS3Bucket}/*"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
+                                    "Fn::If": [
+                                        "DeployProduction",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
+                                    "Fn::If": [
+                                        "DeployProduction",
+                                        {
+                                            "Fn::Sub": "arn:aws:s3:::${ProductionRegionS3Bucket}/*"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 }
                             ]
                         },
@@ -511,12 +643,35 @@
                                     "Ref": "DevelopmentRegionCMK"
                                 },
                                 {
-                                    "Ref": "TestingRegionCMK"
+                                    "Fn::If": [
+                                        "DeployTesting",
+                                        {
+                                            "Ref": "TestingRegionCMK"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 },
                                 {
-                                    "Ref": "ProductionRegionCMK"
+                                    "Fn::If": [
+                                        "DeployProduction",
+                                        {
+                                            "Ref": "ProductionRegionCMK"
+                                        },
+                                        {
+                                            "Ref": "AWS::NoValue"
+                                        }
+                                    ]
                                 }
                             ]
+                        },
+                        {
+                            "Action": "lambda:*",
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::ImportValue": "SyncArtifactsFunctionArn"
+                            }
                         }
                     ]
                 }
@@ -665,6 +820,123 @@
                         ]
                     },
                     {
+                        "Name": "SyncArtifacts",
+                        "Actions": [
+                            {
+                                "Name": "SyncDevelopmentArtifacts",
+                                "ActionTypeId": {
+                                    "Category": "Invoke",
+                                    "Owner": "AWS",
+                                    "Provider": "Lambda",
+                                    "Version": 1
+                                },
+                                "Configuration": {
+                                    "FunctionName": {
+                                        "Fn::ImportValue": "SyncArtifactsFunction"
+                                    },
+                                    "UserParameters": {
+                                        "Fn::Sub": "{ \"DestinationBucket\": \"${DevelopmentRegionS3Bucket}\" }"
+                                    }
+                                },
+                                "InputArtifacts": [
+                                    {
+                                        "Name": "PrimaryOutput"
+                                    },
+                                    {
+                                        "Name": "LambdaOutput"
+                                    }
+                                ],
+                                "RunOrder": 1,
+                                "RoleArn": {
+                                    "Fn::GetAtt": [
+                                        "PipelineSourceRole",
+                                        "Arn"
+                                    ]
+                                }
+                            },
+                            {
+                                "Fn::If": [
+                                    "DeployTesting",
+                                    {
+                                        "Name": "SyncTestingArtifacts",
+                                        "ActionTypeId": {
+                                            "Category": "Invoke",
+                                            "Owner": "AWS",
+                                            "Provider": "Lambda",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "FunctionName": {
+                                                "Fn::ImportValue": "SyncArtifactsFunction"
+                                            },
+                                            "UserParameters": {
+                                                "Fn::Sub": "{ \"DestinationBucket\": \"${TestingRegionS3Bucket}\" }"
+                                            }
+                                        },
+                                        "InputArtifacts": [
+                                            {
+                                                "Name": "PrimaryOutput"
+                                            },
+                                            {
+                                                "Name": "LambdaOutput"
+                                            }
+                                        ],
+                                        "RunOrder": 1,
+                                        "RoleArn": {
+                                            "Fn::GetAtt": [
+                                                "PipelineSourceRole",
+                                                "Arn"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "Ref": "AWS::NoValue"
+                                    }
+                                ]
+                            },
+                            {
+                                "Fn::If": [
+                                    "DeployProduction",
+                                    {
+                                        "Name": "SyncProductionArtifacts",
+                                        "ActionTypeId": {
+                                            "Category": "Invoke",
+                                            "Owner": "AWS",
+                                            "Provider": "Lambda",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "FunctionName": {
+                                                "Fn::ImportValue": "SyncArtifactsFunction"
+                                            },
+                                            "UserParameters": {
+                                                "Fn::Sub": "{ \"DestinationBucket\": \"${ProductionRegionS3Bucket}\" }"
+                                            }
+                                        },
+                                        "InputArtifacts": [
+                                            {
+                                                "Name": "PrimaryOutput"
+                                            },
+                                            {
+                                                "Name": "LambdaOutput"
+                                            }
+                                        ],
+                                        "RunOrder": 1,
+                                        "RoleArn": {
+                                            "Fn::GetAtt": [
+                                                "PipelineSourceRole",
+                                                "Arn"
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        "Ref": "AWS::NoValue"
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    {
                         "Name": "Deploy-Development",
                         "Actions": [
                             {
@@ -695,7 +967,7 @@
                                 },
                                 "RunOrder": 1,
                                 "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline"
                                 }
                             },
                             {
@@ -720,7 +992,7 @@
                                 },
                                 "RunOrder": 2,
                                 "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline"
                                 }
                             },
                             {
@@ -752,7 +1024,7 @@
                                 },
                                 "RunOrder": 1,
                                 "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline"
                                 }
                             },
                             {
@@ -777,254 +1049,270 @@
                                 },
                                 "RunOrder": 2,
                                 "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipelineCloudFormation"
+                                    "Fn::Sub": "arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline"
                                 }
                             }
                         ]
                     },
                     {
-                        "Name": "Deploy-Testing",
-                        "Actions": [
+                        "Fn::If": [
+                            "DeployTesting",
                             {
-                                "Name": "CreatePrimaryChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_REPLACE",
-                                    "StackName": "ExampleProject",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "PrimaryOutput::ExampleProject.template",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "InputArtifacts": [
+                                "Name": "Deploy-Testing",
+                                "Actions": [
                                     {
-                                        "Name": "PrimaryOutput"
-                                    }
-                                ],
-                                "Region": {
-                                    "Ref": "TestingRegion"
-                                },
-                                "RunOrder": 1,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
-                            },
-                            {
-                                "Name": "ExecutePrimaryChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_EXECUTE",
-                                    "StackName": "ExampleProject",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "Region": {
-                                    "Ref": "TestingRegion"
-                                },
-                                "RunOrder": 2,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
-                            },
-                            {
-                                "Name": "CreateLambdaChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_REPLACE",
-                                    "StackName": "ExampleProject-LambdaFunction",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "LambdaOutput::deploy.template",
-                                    "ParameterOverrides": "{ \"BucketName\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"BucketName\" ] }, \"ObjectKey\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"ObjectKey\" ] } }",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "InputArtifacts": [
+                                        "Name": "CreatePrimaryChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_REPLACE",
+                                            "StackName": "ExampleProject",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "TemplatePath": "PrimaryOutput::ExampleProject.template",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "InputArtifacts": [
+                                            {
+                                                "Name": "PrimaryOutput"
+                                            }
+                                        ],
+                                        "Region": {
+                                            "Ref": "TestingRegion"
+                                        },
+                                        "RunOrder": 1,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline"
+                                        }
+                                    },
                                     {
-                                        "Name": "LambdaOutput"
+                                        "Name": "ExecutePrimaryChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_EXECUTE",
+                                            "StackName": "ExampleProject",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "Region": {
+                                            "Ref": "TestingRegion"
+                                        },
+                                        "RunOrder": 2,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline"
+                                        }
+                                    },
+                                    {
+                                        "Name": "CreateLambdaChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_REPLACE",
+                                            "StackName": "ExampleProject-LambdaFunction",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "TemplatePath": "LambdaOutput::deploy.template",
+                                            "ParameterOverrides": "{ \"BucketName\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"BucketName\" ] }, \"ObjectKey\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"ObjectKey\" ] } }",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "InputArtifacts": [
+                                            {
+                                                "Name": "LambdaOutput"
+                                            }
+                                        ],
+                                        "Region": {
+                                            "Ref": "TestingRegion"
+                                        },
+                                        "RunOrder": 1,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline"
+                                        }
+                                    },
+                                    {
+                                        "Name": "ExecuteLambdaChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_EXECUTE",
+                                            "StackName": "ExampleProject-LambdaFunction",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "Region": {
+                                            "Ref": "TestingRegion"
+                                        },
+                                        "RunOrder": 2,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline"
+                                        }
                                     }
-                                ],
-                                "Region": {
-                                    "Ref": "TestingRegion"
-                                },
-                                "RunOrder": 1,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
+                                ]
                             },
                             {
-                                "Name": "ExecuteLambdaChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_EXECUTE",
-                                    "StackName": "ExampleProject-LambdaFunction",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "Region": {
-                                    "Ref": "TestingRegion"
-                                },
-                                "RunOrder": 2,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
+                                "Ref": "AWS::NoValue"
                             }
                         ]
                     },
                     {
-                        "Name": "Deploy-Production",
-                        "Actions": [
+                        "Fn::If": [
+                            "DeployProduction",
                             {
-                                "Name": "ProductionApproval",
-                                "ActionTypeId": {
-                                    "Category": "Approval",
-                                    "Owner": "AWS",
-                                    "Provider": "Manual",
-                                    "Version": 1
-                                },
-                                "RunOrder": 2
-                            },
-                            {
-                                "Name": "CreatePrimaryChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_REPLACE",
-                                    "StackName": "ExampleProject",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "PrimaryOutput::ExampleProject.template",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "InputArtifacts": [
+                                "Name": "Deploy-Production",
+                                "Actions": [
                                     {
-                                        "Name": "PrimaryOutput"
-                                    }
-                                ],
-                                "Region": {
-                                    "Ref": "ProductionRegion"
-                                },
-                                "RunOrder": 1,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
-                            },
-                            {
-                                "Name": "ExecutePrimaryChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_EXECUTE",
-                                    "StackName": "ExampleProject",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "Region": {
-                                    "Ref": "ProductionRegion"
-                                },
-                                "RunOrder": 3,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
-                            },
-                            {
-                                "Name": "CreateLambdaChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_REPLACE",
-                                    "StackName": "ExampleProject-LambdaFunction",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "TemplatePath": "LambdaOutput::deploy.template",
-                                    "ParameterOverrides": "{ \"BucketName\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"BucketName\" ] }, \"ObjectKey\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"ObjectKey\" ] } }",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "InputArtifacts": [
+                                        "Name": "ProductionApproval",
+                                        "ActionTypeId": {
+                                            "Category": "Approval",
+                                            "Owner": "AWS",
+                                            "Provider": "Manual",
+                                            "Version": 1
+                                        },
+                                        "RunOrder": 2
+                                    },
                                     {
-                                        "Name": "LambdaOutput"
+                                        "Name": "CreatePrimaryChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_REPLACE",
+                                            "StackName": "ExampleProject",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "TemplatePath": "PrimaryOutput::ExampleProject.template",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "InputArtifacts": [
+                                            {
+                                                "Name": "PrimaryOutput"
+                                            }
+                                        ],
+                                        "Region": {
+                                            "Ref": "ProductionRegion"
+                                        },
+                                        "RunOrder": 1,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline"
+                                        }
+                                    },
+                                    {
+                                        "Name": "ExecutePrimaryChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_EXECUTE",
+                                            "StackName": "ExampleProject",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "Region": {
+                                            "Ref": "ProductionRegion"
+                                        },
+                                        "RunOrder": 3,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline"
+                                        }
+                                    },
+                                    {
+                                        "Name": "CreateLambdaChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_REPLACE",
+                                            "StackName": "ExampleProject-LambdaFunction",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "TemplatePath": "LambdaOutput::deploy.template",
+                                            "ParameterOverrides": "{ \"BucketName\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"BucketName\" ] }, \"ObjectKey\": { \"Fn::GetArtifactAtt\": [ \"LambdaOutput\", \"ObjectKey\" ] } }",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "InputArtifacts": [
+                                            {
+                                                "Name": "LambdaOutput"
+                                            }
+                                        ],
+                                        "Region": {
+                                            "Ref": "ProductionRegion"
+                                        },
+                                        "RunOrder": 1,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline"
+                                        }
+                                    },
+                                    {
+                                        "Name": "ExecuteLambdaChangeSet",
+                                        "ActionTypeId": {
+                                            "Category": "Deploy",
+                                            "Owner": "AWS",
+                                            "Provider": "CloudFormation",
+                                            "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "ChangeSetName": "DeployChangeSet",
+                                            "ActionMode": "CHANGE_SET_EXECUTE",
+                                            "StackName": "ExampleProject-LambdaFunction",
+                                            "Capabilities": "CAPABILITY_NAMED_IAM",
+                                            "RoleArn": {
+                                                "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
+                                            }
+                                        },
+                                        "Region": {
+                                            "Ref": "ProductionRegion"
+                                        },
+                                        "RunOrder": 3,
+                                        "RoleArn": {
+                                            "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline"
+                                        }
                                     }
-                                ],
-                                "Region": {
-                                    "Ref": "ProductionRegion"
-                                },
-                                "RunOrder": 1,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
+                                ]
                             },
                             {
-                                "Name": "ExecuteLambdaChangeSet",
-                                "ActionTypeId": {
-                                    "Category": "Deploy",
-                                    "Owner": "AWS",
-                                    "Provider": "CloudFormation",
-                                    "Version": 1
-                                },
-                                "Configuration": {
-                                    "ChangeSetName": "DeployChangeSet",
-                                    "ActionMode": "CHANGE_SET_EXECUTE",
-                                    "StackName": "ExampleProject-LambdaFunction",
-                                    "Capabilities": "CAPABILITY_NAMED_IAM",
-                                    "RoleArn": {
-                                        "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation"
-                                    }
-                                },
-                                "Region": {
-                                    "Ref": "ProductionRegion"
-                                },
-                                "RunOrder": 3,
-                                "RoleArn": {
-                                    "Fn::Sub": "arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipelineCloudFormation"
-                                }
+                                "Ref": "AWS::NoValue"
                             }
                         ]
                     }

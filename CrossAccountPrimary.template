@@ -1,0 +1,790 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Creates a CMK in KMS and grants access to other accounts",
+    "Parameters": {
+        "RootAccountArns": {
+            "Description": "A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::DeployAccountId:root).",
+            "Type": "String"
+        },
+        "DeployReady": {
+            "Description": "Conditionally adds deploy ready settings. NOTE: setting this to true creates a self dependency on an export from this stack. Deleting the stack requires first updating the stack with this set to false.",
+            "Type": "String",
+            "Default": "false",
+            "AllowedValues": [
+                "true",
+                "false"
+            ]
+        },
+        "PipelineBucketAccessRoleArns": {
+            "Description": "A comma separated list of ARNs representing the roles for that should have access to the pipeline bucket. This typically includes the 'CrossAccountCodePipeline' (arn:aws:iam::DeployAccountId:role/CrossAccountCodePipeline) and 'CrossAccountCloudFormation' (arn:aws:iam::DeployAccountId:role/CrossAccountCloudFormation) roles. May include the 'CrossAccountPipelineS3Replication' from the 'real' build account if this is a private stack.",
+            "Type": "String"
+        },
+        "PipelineBucketStarArns": {
+            "Type": "String",
+            "Description": "A comma separated list of the pipeline bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*)."
+        },
+        "PipelineCMKs": {
+            "Type": "String",
+            "Description": "A comma separated list of the pipeline CMK ARNS."
+        },
+        "EnableReplication": {
+            "Type": "String",
+            "Description": "Determines whether the replication should be enabled on the build bucket artifacts. This should only be used for developer accounts to replicate the build artifacts across accounts.  NOTE: setting this to true creates a self dependency on an export from this stack. Deleting the stack requires first updating the stack with this set to false.",
+            "Default": "false",
+            "AllowedValues": [
+                "false",
+                "true"
+            ]
+        },
+        "ReplicationBucketList": {
+            "Type": "String",
+            "Description": "A comma separated list of the developer build buckets to replicate to."
+        },
+        "ReplicationBucketStarArns": {
+            "Type": "String",
+            "Description": "A comma separated list of the developer build bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*)."
+        },
+        "ReplicationCMKs": {
+            "Type": "String",
+            "Description": "A comma separated list of the developer account CMK ARNS."
+        }
+    },
+    "Conditions": {
+        "DeployIsReady": {
+            "Fn::Equals": [
+                {
+                    "Ref": "DeployReady"
+                },
+                "true"
+            ]
+        },
+        "ReplicationIsEnabled": {
+            "Fn::Equals": [
+                {
+                    "Ref": "EnableReplication"
+                },
+                "true"
+            ]
+        }
+    },
+    "Resources": {
+        "KMSKey": {
+            "Type": "AWS::KMS::Key",
+            "Properties": {
+                "Description": "Used by Assumed Roles in deploy accounts to Encrypt/Decrypt code",
+                "EnableKeyRotation": true,
+                "KeyPolicy": {
+                    "Version": "2012-10-17",
+                    "Id": {
+                        "Ref": "AWS::StackName"
+                    },
+                    "Statement": [
+                        {
+                            "Sid": "Allows admin of the key",
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Sub": "arn:aws:iam::${AWS::AccountId}:root"
+                                }
+                            },
+                            "Action": [
+                                "kms:Create*",
+                                "kms:Describe*",
+                                "kms:Enable*",
+                                "kms:List*",
+                                "kms:Put*",
+                                "kms:Update*",
+                                "kms:Revoke*",
+                                "kms:Disable*",
+                                "kms:Get*",
+                                "kms:Delete*",
+                                "kms:ScheduleKeyDeletion",
+                                "kms:CancelKeyDeletion",
+                                "kms:Encrypt",
+                                "kms:Decrypt",
+                                "kms:ReEncrypt*",
+                                "kms:GenerateDataKey*",
+                                "kms:DescribeKey"
+                            ],
+                            "Resource": "*"
+                        },
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Split": [
+                                        ",",
+                                        {
+                                            "Ref": "RootAccountArns"
+                                        }
+                                    ]
+                                }
+                            },
+                            "Action": [
+                                "kms:Encrypt",
+                                "kms:Decrypt",
+                                "kms:ReEncrypt*",
+                                "kms:GenerateDataKey*",
+                                "kms:DescribeKey"
+                            ],
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "KMSAlias": {
+            "Type": "AWS::KMS::Alias",
+            "Properties": {
+                "AliasName": "alias/codepipeline-crossaccounts",
+                "TargetKeyId": {
+                    "Ref": "KMSKey"
+                }
+            }
+        },
+        "SyncArtifactsRole": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "CrossAccountPipelineSyncArtifacts",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "SyncArtifactsPolicy"
+                    },
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+                ]
+            }
+        },
+        "SyncArtifactsPolicy": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "ManagedPolicyName": "CrossAccountPipelineSyncArtifacts",
+                "Description": "Policy for syncing artifact data for cross account pipelines",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": [
+                                "kms:Decrypt"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::GetAtt": [
+                                        "KMSKey",
+                                        "Arn"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "s3:*"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Split": [
+                                    ",",
+                                    {
+                                        "Ref": "PipelineBucketStarArns"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "Action": [
+                                "kms:*"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Split": [
+                                    ",",
+                                    {
+                                        "Ref": "PipelineCMKs"
+                                    }
+                                ]
+                            }
+                        },
+                        {
+                            "Action": [
+                                "codepipeline:*"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": "*"
+                        }
+                    ]
+                }
+            }
+        },
+        "SyncArtifactsFunction": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "const aws = require('aws-sdk');",
+                                "const s3 = new aws.S3({region: 'us-east-1'});",
+                                "const codepipeline = new aws.CodePipeline();",
+                                "const path = require('path');",
+                                "",
+                                "exports.handler = function main(event, context) {",
+                                "  console.log(JSON.stringify(event));",
+                                "  // Retrieve the Job ID from the Lambda action",
+                                "  let jobId = event[\"CodePipeline.job\"].id;",
+                                "  try {",
+                                "    let data = JSON.parse(event[\"CodePipeline.job\"].data.actionConfiguration.configuration.UserParameters);",
+                                "    let destBucket = data.DestinationBucket;",
+                                "  ",
+                                "    // Make a task for each combination of record and destBucket",
+                                "    let tasks = [];",
+                                "  ",
+                                "    for (var i = 0; i < event[\"CodePipeline.job\"].data.inputArtifacts.length; i++) {",
+                                "      const sourceBucket = event[\"CodePipeline.job\"].data.inputArtifacts[i].location.s3Location.bucketName;",
+                                "      const sourceKey = event[\"CodePipeline.job\"].data.inputArtifacts[i].location.s3Location.objectKey;",
+                                "  ",
+                                "      if (sourceBucket != destBucket)",
+                                "        tasks.push(replicatePromise(sourceBucket, sourceKey.replace(/\\+/g, \" \"), destBucket));",
+                                "      }",
+                                "  ",
+                                "    if (tasks.length != 0) {",
+                                "      Promise.all(tasks)",
+                                "        .then(() => {",
+                                "          putJobSuccess(jobId, 'Successfully synced artifacts', context);",
+                                "        })",
+                                "        .catch((e) => {",
+                                "          putJobFailure(jobId, e, context);",
+                                "        });",
+                                "    } else {",
+                                "      putJobSuccess(jobId, 'No need to sync', context);",
+                                "    }",
+                                "  }",
+                                "  catch(ex) {",
+                                "    putJobFailure(jobId, ex, context);",
+                                "  }",
+                                "};",
+                                "",
+                                " // Notify AWS CodePipeline of a successful job",
+                                "function putJobSuccess(jobId, message, context) {",
+                                "  var params = {",
+                                "    jobId: jobId",
+                                "  };",
+                                "  codepipeline.putJobSuccessResult(params, function(err, data) {",
+                                "    if(err) {",
+                                "      context.fail(err);",
+                                "    } else {",
+                                "      context.succeed(message);",
+                                "    }",
+                                "  });",
+                                "};",
+                                "",
+                                "// Notify AWS CodePipeline of a failed job",
+                                "function putJobFailure(jobId, message, context) {",
+                                "  var params = {",
+                                "    jobId: jobId,",
+                                "    failureDetails: {",
+                                "      message: JSON.stringify(message),",
+                                "      type: 'JobFailed',",
+                                "      externalExecutionId: context.invokeid",
+                                "    }",
+                                "  };",
+                                "  codepipeline.putJobFailureResult(params, function(err, data) {",
+                                "    context.fail(message);",
+                                "  });",
+                                "};",
+                                "",
+                                "function replicatePromise(sourceBucket, sourceKey, destBucket) {",
+                                "  return new Promise((resolve, reject) => {",
+                                "    var destKey = sourceKey;",
+                                "    var msg = 'copying ' + sourceBucket + ':' + sourceKey + ' to ' + destBucket + ':' + destKey;",
+                                "",
+                                "    console.log('Attempting: ' + msg);",
+                                "    s3.copyObject({",
+                                "      Bucket: destBucket,",
+                                "      Key: destKey,",
+                                "      CopySource: encodeURIComponent(sourceBucket + '/' + sourceKey),",
+                                "      MetadataDirective: 'COPY'",
+                                "    }, (err, data) => {",
+                                "      if (err) {",
+                                "        console.log('Error:' + msg);",
+                                "        console.log(err, err.stack); // an error occurred",
+                                "        return reject('Error:' + msg);",
+                                "      } else {",
+                                "        console.log('Success: ' + msg);",
+                                "        return resolve('Success: ' + msg);",
+                                "      }",
+                                "    });",
+                                "  });",
+                                "}",
+                                "",
+                                "function sleep(ms){",
+                                "    return new Promise(resolve=>{",
+                                "        setTimeout(resolve,ms)",
+                                "    })",
+                                "}"
+                            ]
+                        ]
+                    }
+                },
+                "Description": "Makes sure the input artifacts are in the right bucket.",
+                "FunctionName": "CrossAccountPipelineSyncArtifacts",
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "SyncArtifactsRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs8.10",
+                "Timeout": 30
+            }
+        },
+        "SyncArtifactsLambdaPermission": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "SyncArtifactsFunction"
+                },
+                "Principal": "codepipeline.amazonaws.com",
+                "SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                },
+                "SourceArn": {
+                    "Fn::Sub": "arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:*"
+                }
+            }
+        },
+        "ReplicationRole": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::IAM::Role",
+            "Properties": {
+                "RoleName": "CrossAccountPipelineS3Replication",
+                "AssumeRolePolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": "lambda.amazonaws.com"
+                            },
+                            "Action": "sts:AssumeRole"
+                        }
+                    ]
+                },
+                "ManagedPolicyArns": [
+                    {
+                        "Ref": "ReplicationPolicy"
+                    },
+                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+                ]
+            }
+        },
+        "ReplicationPolicy": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::IAM::ManagedPolicy",
+            "Properties": {
+                "ManagedPolicyName": "CrossAccountPipelineS3Replication",
+                "Description": "Policy for replicating S3 data for developer account pipelines",
+                "PolicyDocument": {
+                    "Version": "2012-10-17",
+                    "Statement": [
+                        {
+                            "Action": [
+                                "s3:ListBucket"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": [
+                                        "arn:aws:s3:::${Bucket}",
+                                        {
+                                            "Bucket": {
+                                                "Fn::ImportValue": "BuildBucket"
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "s3:Get*"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": [
+                                        "arn:aws:s3:::${Bucket}/*",
+                                        {
+                                            "Bucket": {
+                                                "Fn::ImportValue": "BuildBucket"
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "kms:Decrypt"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::GetAtt": [
+                                        "KMSKey",
+                                        "Arn"
+                                    ]
+                                }
+                            ]
+                        },
+                        {
+                            "Fn::If": [
+                                "ReplicationIsEnabled",
+                                {
+                                    "Action": [
+                                        "s3:*"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": {
+                                        "Fn::Split": [
+                                            ",",
+                                            {
+                                                "Ref": "ReplicationBucketStarArns"
+                                            }
+                                        ]
+                                    }
+                                },
+                                {
+                                    "Ref": "AWS::NoValue"
+                                }
+                            ]
+                        },
+                        {
+                            "Fn::If": [
+                                "ReplicationIsEnabled",
+                                {
+                                    "Action": [
+                                        "kms:*"
+                                    ],
+                                    "Effect": "Allow",
+                                    "Resource": {
+                                        "Fn::Split": [
+                                            ",",
+                                            {
+                                                "Ref": "ReplicationCMKs"
+                                            }
+                                        ]
+                                    }
+                                },
+                                {
+                                    "Ref": "AWS::NoValue"
+                                }
+                            ]
+                        }
+                    ]
+                }
+            }
+        },
+        "ReplicationFunction": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::Lambda::Function",
+            "Properties": {
+                "Code": {
+                    "ZipFile": {
+                        "Fn::Join": [
+                            "\n",
+                            [
+                                "const aws = require('aws-sdk');",
+                                "const s3 = new aws.S3({region: 'us-east-1'});",
+                                "const path = require('path');",
+                                "",
+                                "const destBuckets = process.env.DEST_BUCKETS.split(',');",
+                                "",
+                                "exports.handler = function main(event, context) {",
+                                "  // Fail on mising data",
+                                "  if (!destBuckets) {",
+                                "    context.fail('Error: Environment variable DEST_BUCKETS missing');",
+                                "    return;",
+                                "  }",
+                                "  if (event.Records === null) {",
+                                "    context.fail('Error: Event has no records.');",
+                                "    return;",
+                                "  }",
+                                "  // Make a task for each combination of record and destBucket",
+                                "  let tasks = [];",
+                                "  for (let i = 0; i < event.Records.length; i++) {",
+                                "    for (let j = 0; j < destBuckets.length; j++) {",
+                                "      tasks.push(replicatePromise(event.Records[i], destBuckets[j]));",
+                                "    }",
+                                "  }",
+                                "",
+                                "  Promise.all(tasks)",
+                                "    .then(() => { context.succeed();",
+                                "    })",
+                                "    .catch(() => { context.fail();",
+                                "    });",
+                                "};",
+                                "",
+                                "function replicatePromise(record, destBucket) {",
+                                "  return new Promise((resolve, reject) => {",
+                                "    // The source bucket and source key are part of the event data",
+                                "    var srcBucket = record.s3.bucket.name;",
+                                "    var srcKey = decodeURIComponent(record.s3.object.key.replace(/\\+/g,\" \"));",
+                                "    var srcVersion = record.s3.object.version;",
+                                "",
+                                "    // Modify destKey if an alternate copy location is preferred",
+                                "    var destKey = srcKey;",
+                                "    var msg = 'copying ' + srcBucket + ':' + srcKey + ' to ' + destBucket + ':' + destKey;",
+                                "",
+                                "    console.log('Attempting: ' + msg);",
+                                "    s3.copyObject({",
+                                "      Bucket: destBucket,",
+                                "      Key: destKey,",
+                                "      ACL: 'bucket-owner-full-control',",
+                                "      CopySource: encodeURIComponent(srcBucket + '/' + srcKey + (srcVersion ? ('?versionId=' + srcVersion) : '')),",
+                                "      MetadataDirective: 'COPY'",
+                                "    }, (err, data) => {",
+                                "      if (err) {",
+                                "        console.log('Error:' + msg);",
+                                "        console.log(err, err.stack); // an error occurred",
+                                "        return reject('Error:' + msg);",
+                                "      } else {",
+                                "        console.log('Success: ' + msg);",
+                                "        return resolve('Success: ' + msg);",
+                                "      }",
+                                "    });",
+                                "  });",
+                                "}"
+                            ]
+                        ]
+                    }
+                },
+                "Description": "Copies data from on S3 bucket to a list of destination buckets.",
+                "Environment": {
+                    "Variables": {
+                        "DEST_BUCKETS": {
+                            "Ref": "ReplicationBucketList"
+                        }
+                    }
+                },
+                "FunctionName": "S3DataReplicator",
+                "Handler": "index.handler",
+                "MemorySize": 128,
+                "Role": {
+                    "Fn::GetAtt": [
+                        "ReplicationRole",
+                        "Arn"
+                    ]
+                },
+                "Runtime": "nodejs8.10",
+                "Timeout": 30
+            }
+        },
+        "ReplicationLambdaPermission": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+                "Action": "lambda:InvokeFunction",
+                "FunctionName": {
+                    "Ref": "ReplicationFunction"
+                },
+                "Principal": "s3.amazonaws.com",
+                "SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                },
+                "SourceArn": {
+                    "Fn::Sub": [
+                        "arn:aws:s3:::${Bucket}",
+                        {
+                            "Bucket": {
+                                "Fn::ImportValue": "BuildBucket"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "BuildBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "VersioningConfiguration": {
+                    "Status": "Enabled"
+                },
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::GetAtt": [
+                                        "KMSKey",
+                                        "Arn"
+                                    ]
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                },
+                "NotificationConfiguration": {
+                    "Fn::If": [
+                        "ReplicationIsEnabled",
+                        {
+                            "LambdaConfigurations": [
+                                {
+                                    "Event": "s3:ObjectCreated:*",
+                                    "Function": {
+                                        "Fn::ImportValue": "ReplicationFunctionArn"
+                                    }
+                                }
+                            ]
+                        },
+                        {
+                            "Ref": "AWS::NoValue"
+                        }
+                    ]
+                }
+            }
+        },
+        "PipelineBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+                "BucketEncryption": {
+                    "ServerSideEncryptionConfiguration": [
+                        {
+                            "ServerSideEncryptionByDefault": {
+                                "KMSMasterKeyID": {
+                                    "Fn::GetAtt": [
+                                        "KMSKey",
+                                        "Arn"
+                                    ]
+                                },
+                                "SSEAlgorithm": "aws:kms"
+                            }
+                        }
+                    ]
+                }
+            }
+        },
+        "PipelineBucketPolicy": {
+            "Condition": "DeployIsReady",
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "Bucket": {
+                    "Ref": "PipelineBucket"
+                },
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "s3:*"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${PipelineBucket}"
+                                },
+                                {
+                                    "Fn::Sub": "arn:aws:s3:::${PipelineBucket}/*"
+                                }
+                            ],
+                            "Principal": {
+                                "AWS": {
+                                    "Fn::Split": [
+                                        ",",
+                                        {
+                                            "Ref": "PipelineBucketAccessRoleArns"
+                                        }
+                                    ]
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    },
+    "Outputs": {
+        "CMK": {
+            "Description": "The CMK that is used for cross account access",
+            "Value": {
+                "Fn::GetAtt": [
+                    "KMSKey",
+                    "Arn"
+                ]
+            }
+        },
+        "BuildBucket": {
+            "Description": "The bucket for the builds",
+            "Value": {
+                "Ref": "BuildBucket"
+            },
+            "Export": {
+                "Name": "BuildBucket"
+            }
+        },
+        "PipelineBucket": {
+            "Description": "The bucket for the pipeline",
+            "Value": {
+                "Ref": "PipelineBucket"
+            },
+            "Export": {
+                "Name": "PipelineBucket"
+            }
+        },
+        "SyncArtifactsFunction": {
+            "Condition": "DeployIsReady",
+            "Description": "The function for syncing artifacts",
+            "Value": {
+                "Ref": "SyncArtifactsFunction"
+            },
+            "Export": {
+                "Name": "SyncArtifactsFunction"
+            }
+        },
+        "SyncArtifactsFunctionArn": {
+            "Condition": "DeployIsReady",
+            "Description": "The function for syncing artifacts",
+            "Value": {
+                "Fn::GetAtt": [
+                    "SyncArtifactsFunction",
+                    "Arn"
+                ]
+            },
+            "Export": {
+                "Name": "SyncArtifactsFunctionArn"
+            }
+        },
+        "ReplicationFunctionArn": {
+            "Condition": "DeployIsReady",
+            "Description": "The function for replication build artifacts",
+            "Value": {
+                "Fn::GetAtt": [
+                    "ReplicationFunction",
+                    "Arn"
+                ]
+            },
+            "Export": {
+                "Name": "ReplicationFunctionArn"
+            }
+        }
+    }
+}

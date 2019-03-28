@@ -1,0 +1,57 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+    "Description": "Creates a CMK in KMS and grants access to other accounts",
+    "Parameters": {
+        "ReplicationFunctionRoleArn": {
+            "Description": "The ARN of the replication function role in the main account.",
+            "Type": "String"
+        }
+    },
+    "Resources": {
+        "BuildBucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+                "Bucket": {
+                    "Fn::ImportValue": "BuildBucket"
+                },
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "s3:*"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                {
+                                    "Fn::Sub": [
+                                        "arn:aws:s3:::${Bucket}",
+                                        {
+                                            "Bucket": {
+                                                "Fn::ImportValue": "BuildBucket"
+                                            }
+                                        }
+                                    ]
+                                },
+                                {
+                                    "Fn::Sub": [
+                                        "arn:aws:s3:::${Bucket}/*",
+                                        {
+                                            "Bucket": {
+                                                "Fn::ImportValue": "BuildBucket"
+                                            }
+                                        }
+                                    ]
+                                }
+                            ],
+                            "Principal": {
+                                "AWS": {
+                                    "Ref": "ReplicationFunctionRoleArn"
+                                }
+                            }
+                        }
+                    ]
+                }
+            }
+        }
+    }
+}

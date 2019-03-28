@@ -12,10 +12,10 @@
         }
     },
     "Resources": {
-        "CrossAccountCodePipelineCloudFormationRole": {
+        "CrossAccountCodePipelineRole": {
             "Type": "AWS::IAM::Role",
             "Properties": {
-                "RoleName": "CrossAccountCodePipelineCloudFormation",
+                "RoleName": "CrossAccountCodePipeline",
                 "AssumeRolePolicyDocument": {
                     "Version": "2012-10-17",
                     "Statement": [
@@ -32,15 +32,15 @@
                 },
                 "ManagedPolicyArns": [
                     {
-                        "Ref": "CrossAccountCodePipelineCloudFormationPolicy"
+                        "Ref": "CrossAccountCodePipelinePolicy"
                     }
                 ]
             }
         },
-        "CrossAccountCodePipelineCloudFormationPolicy": {
+        "CrossAccountCodePipelinePolicy": {
             "Type": "AWS::IAM::ManagedPolicy",
             "Properties": {
-                "ManagedPolicyName": "CrossAccountCodePipelineCloudFormation",
+                "ManagedPolicyName": "CrossAccountCodePipeline",
                 "PolicyDocument": {
                     "Version": "2012-10-17",
                     "Statement": [
@@ -244,11 +244,11 @@
                 ]
             }
         },
-        "CrossAccountCodePipelineCloudFormationRoleArn": {
+        "CrossAccountCodePipelineRoleArn": {
             "Description": "The code pipeline cloud formation role.",
             "Value": {
                 "Fn::GetAtt": [
-                    "CrossAccountCodePipelineCloudFormationRole",
+                    "CrossAccountCodePipelineRole",
                     "Arn"
                 ]
             }

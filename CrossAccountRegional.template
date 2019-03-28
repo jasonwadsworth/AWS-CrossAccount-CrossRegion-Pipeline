@@ -7,7 +7,7 @@
             "Type": "String"
         },
         "ArtifactBucketAccessRoleArns": {
-            "Description": "A comma separated list of ARNs representing the roles for that should have access to the artifact bucket. This typically includes the 'CrossAccountCodePipelineCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCodePipelineCloudFormation) and 'CrossAccountCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation) roles.",
+            "Description": "A comma separated list of ARNs representing the roles for that should have access to the artifact bucket. This typically includes the 'CrossAccountCodePipeline' (arn:aws:iam::${AccountId}:role/CrossAccountCodePipeline) and 'CrossAccountCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation) roles.",
             "Type": "String"
         }
     },

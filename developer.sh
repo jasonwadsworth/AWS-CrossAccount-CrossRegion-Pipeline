@@ -147,8 +147,8 @@ aws cloudformation create-stack \
     --parameters \
         ParameterKey=ReplicationFunctionRoleArn,ParameterValue=\"$replication_function_role_arn\"
 
-echo "Waiting for developer stack update to complete. This may take several minutes."
-aws cloudformation wait stack-update-complete --stack-name $developer_stack_name --profile $profile --region $region
+echo "Waiting for developer stack create to complete. This may take several minutes."
+aws cloudformation wait stack-create-complete --stack-name $developer_stack_name --profile $profile --region $region
 
 
 echo "Updating build account primary stack"

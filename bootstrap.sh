@@ -183,7 +183,7 @@ do
     regional_pipeline_bucket=$(echo ${stack_info} | jq -r '.Stacks[0].Outputs[] | select( .OutputKey == "PipelineBucket" ) | .OutputValue ' )
     regional_pipeline_buckets+=( "${regional_pipeline_bucket}" )
 
-    pipeline_bucket_star_arns="${pipeline_bucket_star_arns},arn:aws:s3:::${regional_pipeline_buckets}/*"
+    pipeline_bucket_star_arns="${pipeline_bucket_star_arns},arn:aws:s3:::${regional_pipeline_bucket}/*"
 done
 
 echo "Updating deployer stacks"

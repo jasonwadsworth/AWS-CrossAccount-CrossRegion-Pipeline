@@ -157,7 +157,7 @@
                 "Name": "CrossAccountCMK"
             }
         },
-        "ArtifactBucket": {
+        "PipelineBucket": {
             "Description": "The bucket for artifacts",
             "Value": {
                 "Ref": "ArtifactBucket"

@@ -11,7 +11,7 @@ There are some known issues with this repository:
 
 There are also some areas for improvement:
 - A lot of the places where you have to put in ARNs could be generated with the help of a custom transform. For example, instead of supplying a list of buckets as well as the ARNs with /* you could just supply the buckets and use a transform to build the ARNs.
-- It would be nice to have something to kick this whole thing off. Some sort of bootstrap script that does all the work of creating things and waiting for things to finish before doing the next thing. 
+- Need to document the bootstrap and developer shell scripts.
 
 Let's get to it
 ------------
@@ -62,7 +62,7 @@ First, go through the steps of creating a cross account pipeline, treating your 
 In the primary stack:
 - you'll need to add the "real" build account's root account ARN to the _RootAccountArns_ parameter.
 
-You'll also need to run the `CrrossAccountDeveloper.template` in the developer account. It has one parameter:
+You'll also need to run the `CrossAccountDeveloper.template` in the developer account. It has one parameter:
 - _ReplicationFunctionRoleArn_ - the role ARN from the primary account's replication function
 
 In the "real" build account you'll need to modify the replication settings:

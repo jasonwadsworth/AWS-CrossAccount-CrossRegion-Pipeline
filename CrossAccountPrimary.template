@@ -791,6 +791,16 @@
             "Export": {
                 "Name": "ReplicationFunctionArn"
             }
+        },
+        "ReplicationRoleArn": {
+            "Condition": "DeployIsReady",
+            "Description": "The role used for replication.",
+            "Value": {
+                "Fn::GetAtt": [
+                    "ReplicationRole",
+                    "Arn"
+                ]
+            }
         }
     }
 }

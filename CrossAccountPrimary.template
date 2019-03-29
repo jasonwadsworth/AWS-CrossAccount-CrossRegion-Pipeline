@@ -1,6 +1,6 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "Creates a CMK in KMS and grants access to other accounts",
+    "Description": "Cross account primary stack.",
     "Parameters": {
         "RootAccountArns": {
             "Description": "A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::DeployAccountId:root).",

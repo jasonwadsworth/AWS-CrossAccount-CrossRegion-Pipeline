@@ -1,6 +1,6 @@
 {
     "AWSTemplateFormatVersion": "2010-09-09",
-    "Description": "Continuous integration project for ExampleProject",
+    "Description": "Cross account deploy stack.",
     "Parameters": {
         "BuildAccount": {
             "Description": "AWS AccountNumber for the Build Account",

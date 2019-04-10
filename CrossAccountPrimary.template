@@ -736,6 +736,9 @@
                     "KMSKey",
                     "Arn"
                 ]
+            },
+            "Export": {
+                "Name": "CrossAccountCMK"
             }
         },
         "BuildBucket": {

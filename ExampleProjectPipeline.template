@@ -354,8 +354,6 @@
                                 "iam:ListRoles",
                                 "cloudformation:Describe*",
                                 "cloudFormation:List*",
-                                "codebuild:BatchGetBuilds",
-                                "codebuild:StartBuild",
                                 "cloudformation:CreateStack",
                                 "cloudformation:DeleteStack",
                                 "cloudformation:DescribeStacks",

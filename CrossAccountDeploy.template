@@ -47,6 +47,7 @@
                         {
                             "Effect": "Allow",
                             "Action": [
+                                "codebuild:*"
                                 "cloudformation:*",
                                 "s3:*",
                                 "iam:PassRole"

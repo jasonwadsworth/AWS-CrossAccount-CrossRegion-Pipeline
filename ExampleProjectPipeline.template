@@ -372,6 +372,15 @@
                             "Effect": "Allow"
                         },
                         {
+                            "Action": [
+                                "sns:Publish"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": {
+                                "Fn::Sub": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:PipelineManualIntervention"
+                            }
+                        },
+                        {
                             "Effect": "Allow",
                             "Action": [
                                 "kms:Decrypt"
@@ -1191,6 +1200,12 @@
                                             "Owner": "AWS",
                                             "Provider": "Manual",
                                             "Version": 1
+                                        },
+                                        "Configuration": {
+                                            "CustomData": "Example Project Production Deployment",
+                                            "NotificationArn": {
+                                                "Fn::Sub": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:PipelineManualIntervention"
+                                            }
                                         },
                                         "RunOrder": 2
                                     },

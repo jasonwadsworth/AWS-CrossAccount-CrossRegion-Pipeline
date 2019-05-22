@@ -148,6 +148,13 @@
                 }
             }
         },
+        "ManualInterventionTopic": {
+            "Type": "AWS::SNS::Topic",
+            "Properties": {
+                "DisplayName": "Topic for pipeline manual intervention notifications",
+                "TopicName": "PipelineManualIntervention"
+            }
+        },
         "SyncArtifactsRole": {
             "Condition": "DeployIsReady",
             "Type": "AWS::IAM::Role",

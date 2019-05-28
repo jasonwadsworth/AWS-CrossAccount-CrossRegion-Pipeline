@@ -809,7 +809,7 @@
                                         "Ref": "BuildBucket"
                                     },
                                     "S3ObjectKey": "ExampleProject/LambdaFunction/Lambda.zip",
-                                    "PollForSourceChanges": "true"
+                                    "PollForSourceChanges": "false"
                                 },
                                 "OutputArtifacts": [
                                     {

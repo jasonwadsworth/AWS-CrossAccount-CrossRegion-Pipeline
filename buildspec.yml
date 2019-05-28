@@ -19,10 +19,7 @@ phases:
       - dotnet publish ./LambdaFunction/src/LambdaFunction/ --no-build -c Release -o ../../../publish/lambda
 
       - echo $CODEBUILD_WEBHOOK_HEAD_REF
-      - lambda_file_name=Lambda-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
-      - if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/master" ] ; then lambda_file_name=Lambda.zip ; fi
-      - if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "" ] ; then lambda_file_name=Lambda.zip ; fi
-      - echo $lambda_file_name
+      - lambda_file_name=Lambda.zip
 
       - file_name=ExampleProject-$CODEBUILD_RESOLVED_SOURCE_VERSION.zip
       - if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/master" ] ; then file_name=ExampleProject.zip ; fi
@@ -37,7 +34,7 @@ artifacts:
   name: $file_name
   secondary-artifacts:
     LambdaFunction:
-      base-directory: "publish/lambda"
+      base-directory: 'publish/lambda'
       files:
-        - "**/*"
+        - '**/*'
       name: $lambda_file_name

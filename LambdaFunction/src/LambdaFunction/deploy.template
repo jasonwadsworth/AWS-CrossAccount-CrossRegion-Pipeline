@@ -10,6 +10,13 @@
         }
     },
     "Resources": {
+        "LogGroup": {
+            "Type": "AWS::Logs::LogGroup",
+            "Properties": {
+                "LogGroupName": "/aws/lambda/ExampleProject-LambdaFunction",
+                "RetentionInDays": 14
+            }
+        },
         "Function": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
@@ -64,15 +71,15 @@
                         {
                             "Effect": "Allow",
                             "Action": [
-                                "log:CreateLogStream",
-                                "log:PutLogEvents"
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents"
                             ],
                             "Resource": [
                                 {
                                     "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ExampleProject-LambdaFunction"
                                 },
                                 {
-                                    "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ExampleProject-LambdaFunction/*"
+                                    "Fn::Sub": "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ExampleProject-LambdaFunction:*"
                                 }
                             ]
                         }
@@ -101,7 +108,6 @@
                     ]
                 },
                 "ManagedPolicyArns": [
-                    "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
                     {
                         "Ref": "Policy"
                     }

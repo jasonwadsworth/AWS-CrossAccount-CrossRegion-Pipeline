@@ -35,7 +35,7 @@ phases:
 artifacts:
   type: zip
   files:
-    - ExampleProject.template
+    - ExampleProject.yaml
     - LambdaFunction-Unit-Tests.html
   name: $file_name
   secondary-artifacts:

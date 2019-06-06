@@ -12,6 +12,6 @@
     <PackageReference Include="Amazon.Lambda.AspNetCoreServer" Version="3.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <None Update="deploy.template" CopyToPublishDirectory="Always" CopyToOutputDirectory="Always" />
+    <None Update="deploy.yaml" CopyToPublishDirectory="Always" CopyToOutputDirectory="Always" />
   </ItemGroup>
 </Project>

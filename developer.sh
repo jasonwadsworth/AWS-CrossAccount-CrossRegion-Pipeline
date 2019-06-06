@@ -36,7 +36,7 @@ aws cloudformation create-stack \
     --profile $profile \
     --region $region \
     --stack-name $primary_stack_name \
-    --template-body file://CrossAccountPrimary.template \
+    --template-body file://CrossAccountPrimary.yaml \
     --parameters \
         ParameterKey=RootAccountArns,ParameterValue=\"$root_account_arns\" \
     --capabilities CAPABILITY_NAMED_IAM
@@ -73,7 +73,7 @@ do
             --profile $deploy_profile \
             --region $deploy_region \
             --stack-name $deploy_stack_name \
-            --template-body file://CrossAccountDeploy.template \
+            --template-body file://CrossAccountDeploy.yaml \
             --parameters \
                 ParameterKey=BuildAccount,ParameterValue=$build_account \
                 ParameterKey=CMKARNs,ParameterValue=$primary_region_cmk \
@@ -143,7 +143,7 @@ aws cloudformation create-stack \
     --profile $profile \
     --region $region \
     --stack-name $developer_stack_name \
-    --template-body file://CrossAccountDeveloper.template \
+    --template-body file://CrossAccountDeveloper.yaml \
     --parameters \
         ParameterKey=ReplicationFunctionRoleArn,ParameterValue=\"$replication_function_role_arn\"
 

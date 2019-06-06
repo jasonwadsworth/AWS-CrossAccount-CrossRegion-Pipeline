@@ -48,7 +48,7 @@ aws cloudformation create-stack \
     --profile $profile \
     --region $region \
     --stack-name $primary_stack_name \
-    --template-body file://CrossAccountPrimary.template \
+    --template-body file://CrossAccountPrimary.yaml \
     --parameters \
         ParameterKey=RootAccountArns,ParameterValue=\"$root_account_arns\" \
     --capabilities CAPABILITY_NAMED_IAM
@@ -84,7 +84,7 @@ do
             --profile $deploy_profile \
             --region $deploy_region \
             --stack-name $deploy_stack_name \
-            --template-body file://CrossAccountDeploy.template \
+            --template-body file://CrossAccountDeploy.yaml \
             --parameters \
                 ParameterKey=BuildAccount,ParameterValue=$build_account \
                 ParameterKey=CMKARNs,ParameterValue=$primary_region_cmk \
@@ -154,7 +154,7 @@ do
                 --profile $profile \
                 --region $deploy_region \
                 --stack-name $regional_stack_name \
-                --template-body file://CrossAccountRegional.template \
+                --template-body file://CrossAccountRegional.yaml \
                 --parameters \
                     ParameterKey=RootAccountArns,ParameterValue=\"$root_account_arns\" \
                     ParameterKey=PipelineBucketAccessRoleArns,ParameterValue=\"$pipeline_bucket_access_role_arns\" \

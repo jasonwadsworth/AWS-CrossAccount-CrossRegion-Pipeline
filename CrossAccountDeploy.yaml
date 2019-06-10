@@ -56,8 +56,8 @@ Resources:
         - 'arn:aws:iam::aws:policy/AdministratorAccess'
   CrossAccountCloudFormationPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
-    Description: Policy for Cross Account CloudFormation
     Properties:
+      Description: Policy for Cross Account CloudFormation
       ManagedPolicyName: CrossAccountCloudFormation
       PolicyDocument:
         Version: '2012-10-17'

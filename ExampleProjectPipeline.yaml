@@ -107,8 +107,8 @@ Resources:
         - !Ref CodeBuildPolicy
   CodeBuildPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
-    Description: Policy for ExampleProject CodeBuild project
     Properties:
+      Description: Policy for ExampleProject CodeBuild project
       ManagedPolicyName: ExampleProject-CodeBuild
       PolicyDocument:
         Version: '2012-10-17'
@@ -134,7 +134,7 @@ Resources:
       Name: !Sub ExampleProject
       Artifacts:
         Type: S3
-        Packaging: zip
+        Packaging: ZIP
         Location: !Ref BuildBucket
         Name: ExampleProject.zip
         OverrideArtifactName: true
@@ -142,7 +142,7 @@ Resources:
       SecondaryArtifacts:
         - ArtifactIdentifier: LambdaFunction
           Type: S3
-          Packaging: zip
+          Packaging: ZIP
           Location: !Ref BuildBucket
           Name: ExampleProject.LambdaFunction.zip
           OverrideArtifactName: true
@@ -190,8 +190,8 @@ Resources:
         - !Ref CodePipelinePolicy
   CodePipelinePolicy:
     Type: 'AWS::IAM::ManagedPolicy'
-    Description: Policy for ExampleProject CodePipeline
     Properties:
+      Description: Policy for ExampleProject CodePipeline
       ManagedPolicyName: ExampleProject-CodePipeline
       PolicyDocument:
         Version: '2012-10-17'
@@ -350,7 +350,6 @@ Resources:
             Resource: !ImportValue SyncArtifactsFunctionArn
   Pipeline:
     Type: 'AWS::CodePipeline::Pipeline'
-    Description: Pipeline for ExampleProject
     Properties:
       Name: ExampleProject
       RoleArn: !GetAtt CodePipelineRole.Arn
@@ -390,7 +389,7 @@ Resources:
                 Category: Source
                 Owner: AWS
                 Provider: S3
-                Version: 1
+                Version: '1'
               Configuration:
                 S3Bucket: !Ref BuildBucket
                 S3ObjectKey: ExampleProject/ExampleProject.zip
@@ -404,7 +403,7 @@ Resources:
                 Category: Source
                 Owner: AWS
                 Provider: S3
-                Version: 1
+                Version: '1'
               Configuration:
                 S3Bucket: !Ref BuildBucket
                 S3ObjectKey: ExampleProject/LambdaFunction/Lambda.zip
@@ -420,7 +419,7 @@ Resources:
                 Category: Invoke
                 Owner: AWS
                 Provider: Lambda
-                Version: 1
+                Version: '1'
               Configuration:
                 FunctionName: !ImportValue SyncArtifactsFunction
                 UserParameters: !Sub '{ "DestinationBucket": "${DevelopmentRegionS3Bucket}" }'
@@ -436,7 +435,7 @@ Resources:
                     Category: Invoke
                     Owner: AWS
                     Provider: Lambda
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     FunctionName: !ImportValue SyncArtifactsFunction
                     UserParameters: !Sub '{ "DestinationBucket": "${TestingRegionS3Bucket}" }'
@@ -453,7 +452,7 @@ Resources:
                     Category: Invoke
                     Owner: AWS
                     Provider: Lambda
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     FunctionName: !ImportValue SyncArtifactsFunction
                     UserParameters: !Sub '{ "DestinationBucket": "${ProductionRegionS3Bucket}" }'
@@ -470,7 +469,7 @@ Resources:
                 Category: Deploy
                 Owner: AWS
                 Provider: CloudFormation
-                Version: 1
+                Version: '1'
               Configuration:
                 ChangeSetName: DeployChangeSet
                 ActionMode: CHANGE_SET_REPLACE
@@ -488,7 +487,7 @@ Resources:
                 Category: Deploy
                 Owner: AWS
                 Provider: CloudFormation
-                Version: 1
+                Version: '1'
               Configuration:
                 ChangeSetName: DeployChangeSet
                 ActionMode: CHANGE_SET_EXECUTE
@@ -503,7 +502,7 @@ Resources:
                 Category: Deploy
                 Owner: AWS
                 Provider: CloudFormation
-                Version: 1
+                Version: '1'
               Configuration:
                 ChangeSetName: DeployChangeSet
                 ActionMode: CHANGE_SET_REPLACE
@@ -522,7 +521,7 @@ Resources:
                 Category: Deploy
                 Owner: AWS
                 Provider: CloudFormation
-                Version: 1
+                Version: '1'
               Configuration:
                 ChangeSetName: DeployChangeSet
                 ActionMode: CHANGE_SET_EXECUTE
@@ -541,7 +540,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_REPLACE
@@ -559,7 +558,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_EXECUTE
@@ -574,7 +573,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_REPLACE
@@ -593,7 +592,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_EXECUTE
@@ -613,7 +612,7 @@ Resources:
                     Category: Approval
                     Owner: AWS
                     Provider: Manual
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     CustomData: Example Project Production Deployment
                     NotificationArn: !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:PipelineManualIntervention'
@@ -623,7 +622,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_REPLACE
@@ -641,7 +640,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_EXECUTE
@@ -656,7 +655,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_REPLACE
@@ -675,7 +674,7 @@ Resources:
                     Category: Deploy
                     Owner: AWS
                     Provider: CloudFormation
-                    Version: 1
+                    Version: '1'
                   Configuration:
                     ChangeSetName: DeployChangeSet
                     ActionMode: CHANGE_SET_EXECUTE

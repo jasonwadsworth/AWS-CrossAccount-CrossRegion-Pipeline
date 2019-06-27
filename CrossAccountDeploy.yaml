@@ -34,6 +34,7 @@ Resources:
               - 'cloudformation:*'
               - 's3:*'
               - 'iam:PassRole'
+              - 'lambda:invoke*'
             Resource: '*'
           - Effect: Allow
             Action: 'kms:*'

@@ -4,18 +4,6 @@ Parameters:
   GitHubUrl:
     Description: The HTTPS URL for GitHub for the project
     Type: String
-  BuildAccount:
-    Description: AWS AccountNumber for the build account
-    Type: Number
-  BuildBucket:
-    Description: The S3 bucket used for the builds
-    Type: String
-  BuildRegionCMK:
-    Description: The customer master key to use for the region of the builds
-    Type: String
-  DevelopmentAccount:
-    Description: AWS AccountNumber for the development account
-    Type: Number
   DevelopmentRegion:
     Description: AWS Region of development
     Type: String
@@ -31,9 +19,6 @@ Parameters:
     AllowedValues:
       - 'true'
       - 'false'
-  TestingAccount:
-    Description: AWS AccountNumber for the testing account
-    Type: Number
   TestingRegion:
     Description: AWS Region of testing
     Type: String
@@ -49,9 +34,6 @@ Parameters:
     AllowedValues:
       - 'true'
       - 'false'
-  ProductionAccount:
-    Description: AWS AccountNumber for the production account
-    Type: Number
   ProductionRegion:
     Description: AWS Region of production
     Type: String
@@ -124,18 +106,22 @@ Resources:
               - 's3:GetObject'
               - 's3:GetObjectVersion'
             Resource:
-              - !Sub 'arn:aws:s3:::${BuildBucket}'
-              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}'
+                  - Bucket: !ImportValue BuildBucket
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}/*'
+                  - Bucket: !ImportValue BuildBucket
             Effect: Allow
   CodeBuildProject:
     Type: 'AWS::CodeBuild::Project'
     Properties:
       Description: Continuous integration build for ExampleProject
-      Name: !Sub ExampleProject
+      Name: ExampleProject
       Artifacts:
         Type: S3
         Packaging: ZIP
-        Location: !Ref BuildBucket
+        Location: !ImportValue BuildBucket
         Name: ExampleProject.zip
         OverrideArtifactName: true
         Path: ExampleProject
@@ -143,7 +129,7 @@ Resources:
         - ArtifactIdentifier: LambdaFunction
           Type: S3
           Packaging: ZIP
-          Location: !Ref BuildBucket
+          Location: !ImportValue BuildBucket
           Name: ExampleProject.LambdaFunction.zip
           OverrideArtifactName: true
           Path: ExampleProject/LambdaFunction
@@ -180,7 +166,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Ref BuildAccount
+              AWS: !Ref 'AWS::AccountId'
             Action: 'sts:AssumeRole'
           - Action: 'sts:AssumeRole'
             Effect: Allow
@@ -224,7 +210,7 @@ Resources:
             Action:
               - 'kms:Decrypt'
             Resource:
-              - !Ref BuildRegionCMK
+              - !ImportValue CrossAccountCMK
               - !Ref DevelopmentRegionCMK
               - 'Fn::If':
                   - DeployTesting
@@ -240,8 +226,12 @@ Resources:
               - 's3:GetObject'
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${BuildBucket}'
-              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}'
+                  - Bucket: !ImportValue BuildBucket
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}/*'
+                  - Bucket: !ImportValue BuildBucket
           - Action:
               - 's3:GetBucketPolicy'
               - 's3:ListBucket'
@@ -279,14 +269,14 @@ Resources:
             Action: 'sts:AssumeRole'
             Resource:
               - !GetAtt PipelineSourceRole.Arn
-              - !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline'
+              - 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCodePipeline'
               - 'Fn::If':
                   - DeployTesting
-                  - !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline'
+                  - 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCodePipeline'
                   - !Ref 'AWS::NoValue'
               - 'Fn::If':
                   - DeployProduction
-                  - !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline'
+                  - 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCodePipeline'
                   - !Ref 'AWS::NoValue'
   PipelineSourceRole:
     Type: 'AWS::IAM::Role'
@@ -311,8 +301,12 @@ Resources:
             Action:
               - 's3:*'
             Resource:
-              - !Sub 'arn:aws:s3:::${BuildBucket}'
-              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}'
+                  - Bucket: !ImportValue BuildBucket
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}/*'
+                  - Bucket: !ImportValue BuildBucket
               - !Sub 'arn:aws:s3:::${DevelopmentRegionS3Bucket}'
               - !Sub 'arn:aws:s3:::${DevelopmentRegionS3Bucket}/*'
               - 'Fn::If':
@@ -335,7 +329,7 @@ Resources:
             Action:
               - 'kms:*'
             Resource:
-              - !Ref BuildRegionCMK
+              - !ImportValue CrossAccountCMK
               - !Ref DevelopmentRegionCMK
               - 'Fn::If':
                   - DeployTesting
@@ -391,7 +385,7 @@ Resources:
                 Provider: S3
                 Version: '1'
               Configuration:
-                S3Bucket: !Ref BuildBucket
+                S3Bucket: !ImportValue BuildBucket
                 S3ObjectKey: ExampleProject/ExampleProject.zip
                 PollForSourceChanges: 'true'
               OutputArtifacts:
@@ -405,7 +399,7 @@ Resources:
                 Provider: S3
                 Version: '1'
               Configuration:
-                S3Bucket: !Ref BuildBucket
+                S3Bucket: !ImportValue BuildBucket
                 S3ObjectKey: ExampleProject/LambdaFunction/Lambda.zip
                 PollForSourceChanges: 'false'
               OutputArtifacts:
@@ -476,12 +470,12 @@ Resources:
                 StackName: ExampleProject
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: 'PrimaryOutput::ExampleProject.yaml'
-                RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation'
+                RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCloudFormation'
               InputArtifacts:
                 - Name: PrimaryOutput
               Region: !Ref DevelopmentRegion
               RunOrder: 1
-              RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline'
+              RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCodePipeline'
             - Name: ExecutePrimaryChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -493,10 +487,10 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation'
+                RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCloudFormation'
               Region: !Ref DevelopmentRegion
               RunOrder: 2
-              RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline'
+              RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCodePipeline'
             - Name: CreateLambdaChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -510,12 +504,12 @@ Resources:
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: 'LambdaOutput::deploy.yaml'
                 ParameterOverrides: '{ "BucketName": { "Fn::GetArtifactAtt": [ "LambdaOutput", "BucketName" ] }, "ObjectKey": { "Fn::GetArtifactAtt": [ "LambdaOutput", "ObjectKey" ] } }'
-                RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation'
+                RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCloudFormation'
               InputArtifacts:
                 - Name: LambdaOutput
               Region: !Ref DevelopmentRegion
               RunOrder: 1
-              RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline'
+              RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCodePipeline'
             - Name: ExecuteLambdaChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -527,10 +521,10 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject-LambdaFunction
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCloudFormation'
+                RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCloudFormation'
               Region: !Ref DevelopmentRegion
               RunOrder: 2
-              RoleArn: !Sub 'arn:aws:iam::${DevelopmentAccount}:role/CrossAccountCodePipeline'
+              RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/DevelopmentAccount:1}}:role/CrossAccountCodePipeline'
         - 'Fn::If':
             - DeployTesting
             - Name: Deploy-Testing
@@ -547,12 +541,12 @@ Resources:
                     StackName: ExampleProject
                     Capabilities: CAPABILITY_NAMED_IAM
                     TemplatePath: 'PrimaryOutput::ExampleProject.yaml'
-                    RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCloudFormation'
                   InputArtifacts:
                     - Name: PrimaryOutput
                   Region: !Ref TestingRegion
                   RunOrder: 1
-                  RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCodePipeline'
                 - Name: ExecutePrimaryChangeSet
                   ActionTypeId:
                     Category: Deploy
@@ -564,10 +558,10 @@ Resources:
                     ActionMode: CHANGE_SET_EXECUTE
                     StackName: ExampleProject
                     Capabilities: CAPABILITY_NAMED_IAM
-                    RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCloudFormation'
                   Region: !Ref TestingRegion
                   RunOrder: 2
-                  RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCodePipeline'
                 - Name: CreateLambdaChangeSet
                   ActionTypeId:
                     Category: Deploy
@@ -581,12 +575,12 @@ Resources:
                     Capabilities: CAPABILITY_NAMED_IAM
                     TemplatePath: 'LambdaOutput::deploy.yaml'
                     ParameterOverrides: '{ "BucketName": { "Fn::GetArtifactAtt": [ "LambdaOutput", "BucketName" ] }, "ObjectKey": { "Fn::GetArtifactAtt": [ "LambdaOutput", "ObjectKey" ] } }'
-                    RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCloudFormation'
                   InputArtifacts:
                     - Name: LambdaOutput
                   Region: !Ref TestingRegion
                   RunOrder: 1
-                  RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCodePipeline'
                 - Name: ExecuteLambdaChangeSet
                   ActionTypeId:
                     Category: Deploy
@@ -598,10 +592,10 @@ Resources:
                     ActionMode: CHANGE_SET_EXECUTE
                     StackName: ExampleProject-LambdaFunction
                     Capabilities: CAPABILITY_NAMED_IAM
-                    RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCloudFormation'
                   Region: !Ref TestingRegion
                   RunOrder: 2
-                  RoleArn: !Sub 'arn:aws:iam::${TestingAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/TestingAccount:1}}:role/CrossAccountCodePipeline'
             - !Ref 'AWS::NoValue'
         - 'Fn::If':
             - DeployProduction
@@ -629,12 +623,12 @@ Resources:
                     StackName: ExampleProject
                     Capabilities: CAPABILITY_NAMED_IAM
                     TemplatePath: 'PrimaryOutput::ExampleProject.yaml'
-                    RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCloudFormation'
                   InputArtifacts:
                     - Name: PrimaryOutput
                   Region: !Ref ProductionRegion
                   RunOrder: 1
-                  RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCodePipeline'
                 - Name: ExecutePrimaryChangeSet
                   ActionTypeId:
                     Category: Deploy
@@ -646,10 +640,10 @@ Resources:
                     ActionMode: CHANGE_SET_EXECUTE
                     StackName: ExampleProject
                     Capabilities: CAPABILITY_NAMED_IAM
-                    RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCloudFormation'
                   Region: !Ref ProductionRegion
                   RunOrder: 3
-                  RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCodePipeline'
                 - Name: CreateLambdaChangeSet
                   ActionTypeId:
                     Category: Deploy
@@ -663,12 +657,12 @@ Resources:
                     Capabilities: CAPABILITY_NAMED_IAM
                     TemplatePath: 'LambdaOutput::deploy.yaml'
                     ParameterOverrides: '{ "BucketName": { "Fn::GetArtifactAtt": [ "LambdaOutput", "BucketName" ] }, "ObjectKey": { "Fn::GetArtifactAtt": [ "LambdaOutput", "ObjectKey" ] } }'
-                    RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCloudFormation'
                   InputArtifacts:
                     - Name: LambdaOutput
                   Region: !Ref ProductionRegion
                   RunOrder: 1
-                  RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCodePipeline'
                 - Name: ExecuteLambdaChangeSet
                   ActionTypeId:
                     Category: Deploy
@@ -680,8 +674,8 @@ Resources:
                     ActionMode: CHANGE_SET_EXECUTE
                     StackName: ExampleProject-LambdaFunction
                     Capabilities: CAPABILITY_NAMED_IAM
-                    RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCloudFormation'
+                    RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCloudFormation'
                   Region: !Ref ProductionRegion
                   RunOrder: 3
-                  RoleArn: !Sub 'arn:aws:iam::${ProductionAccount}:role/CrossAccountCodePipeline'
+                  RoleArn: 'arn:aws:iam::{{resolve:ssm:/CrossAccountPipeline/ProductionAccount:1}}:role/CrossAccountCodePipeline'
             - !Ref 'AWS::NoValue'

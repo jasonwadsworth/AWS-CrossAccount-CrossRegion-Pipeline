@@ -19,6 +19,12 @@ region=${region:-"us-east-1"}
 
 read -p 'Developer account number: ' build_account
 
+read -p 'Deployment name [Development]: ' deploy_name
+deploy_name=${deploy_name:-"Development"}
+
+parameter_name="/CrossAccountPipeline/${deploy_name}Account"
+parameter_description="The AccountId of the ${deploy_name} account for cross account pipelines."
+aws ssm put-parameter --profile $profile --region $region --name $parameter_name --value $build_account --type "String" --no-overwrite --description $parameter_description
 
 root_account_arns="arn:aws:iam::${build_account}:root,arn:aws:iam::${real_build_account}:root"
 

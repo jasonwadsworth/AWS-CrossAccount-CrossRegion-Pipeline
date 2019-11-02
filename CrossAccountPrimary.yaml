@@ -268,7 +268,7 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt SyncArtifactsRole.Arn
-      Runtime: nodejs8.10
+      Runtime: nodejs10.x
       Timeout: 30
   SyncArtifactsLambdaPermission:
     Condition: DeployIsReady
@@ -420,7 +420,7 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt ReplicationRole.Arn
-      Runtime: nodejs8.10
+      Runtime: nodejs10.x
       Timeout: 30
   ReplicationLambdaPermission:
     Condition: DeployIsReady

@@ -1,57 +1,12 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Cross account primary stack.
 Parameters:
-  RootAccountArns:
-    Description: 'A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::DeployAccountId:root).'
+  DeploymentOrgPath:
     Type: String
-  DeployReady:
-    Description: 'Conditionally adds deploy ready settings. NOTE: setting this to true creates a self dependency on an export from this stack. Deleting the stack requires first updating the stack with this set to false.'
-    Type: String
-    Default: 'false'
-    AllowedValues:
-      - 'true'
-      - 'false'
-  PipelineBucketAccessRoleArns:
-    Description: "A comma separated list of ARNs representing the roles for that should have access to the pipeline bucket. This typically includes the 'CrossAccountCodePipeline' (arn:aws:iam::DeployAccountId:role/CrossAccountCodePipeline) and 'CrossAccountCloudFormation' (arn:aws:iam::DeployAccountId:role/CrossAccountCloudFormation) roles. May include the 'CrossAccountPipelineS3Replication' from the 'real' build account if this is a private stack."
-    Type: String
-    Default: ''
-  PipelineBucketStarArns:
-    Type: String
-    Description: 'A comma separated list of the pipeline bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*).'
-    Default: ''
-  PipelineCMKs:
-    Type: String
-    Description: A comma separated list of the pipeline CMK ARNS.
-    Default: ''
-  EnableReplication:
-    Type: String
-    Description: 'Determines whether the replication should be enabled on the build bucket artifacts. This should only be used for developer accounts to replicate the build artifacts across accounts.  NOTE: setting this to true creates a self dependency on an export from this stack. Deleting the stack requires first updating the stack with this set to false.'
-    Default: 'false'
-    AllowedValues:
-      - 'false'
-      - 'true'
-  ReplicationBucketList:
-    Type: String
-    Description: A comma separated list of the developer build buckets to replicate to.
-    Default: ''
-  ReplicationBucketStarArns:
-    Type: String
-    Description: 'A comma separated list of the developer build bucket ARNs, with full wildcard access (arn:aws:s3:::bucketName/*).'
-    Default: ''
-  ReplicationCMKs:
-    Type: String
-    Description: A comma separated list of the developer account CMK ARNS.
-    Default: ''
-Conditions:
-  DeployIsReady:
-    'Fn::Equals':
-      - !Ref DeployReady
-      - 'true'
-  ReplicationIsEnabled:
-    'Fn::Equals':
-      - !Ref EnableReplication
-      - 'true'
 Resources:
+  # This KMS key is for use with the cross account build/deploment.
+  # The permermissions allow the CrossAccountCodePipeline role within the deployment
+  # organization to use the key.
   KMSKey:
     Type: 'AWS::KMS::Key'
     Properties:
@@ -85,11 +40,7 @@ Resources:
               - 'kms:DescribeKey'
             Resource: '*'
           - Effect: Allow
-            Principal:
-              AWS:
-                'Fn::Split':
-                  - ','
-                  - !Ref RootAccountArns
+            Principal: '*'
             Action:
               - 'kms:Encrypt'
               - 'kms:Decrypt'
@@ -97,18 +48,28 @@ Resources:
               - 'kms:GenerateDataKey*'
               - 'kms:DescribeKey'
             Resource: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCodePipeline
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+
   KMSAlias:
     Type: 'AWS::KMS::Alias'
     Properties:
       AliasName: alias/codepipeline-crossaccounts
       TargetKeyId: !Ref KMSKey
+
+  # Topic to be used for manual intervention notification in a pipeline.
   ManualInterventionTopic:
     Type: 'AWS::SNS::Topic'
     Properties:
       DisplayName: Topic for pipeline manual intervention notifications
       TopicName: PipelineManualIntervention
+
+  # Role for the sync artifacts function.
   SyncArtifactsRole:
-    Condition: DeployIsReady
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: CrossAccountPipelineSyncArtifacts
@@ -122,8 +83,10 @@ Resources:
       ManagedPolicyArns:
         - !Ref SyncArtifactsPolicy
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+  # This policy gives the sync artifacts function permission to decrypt with KMS key
+  # and to send updates to CodePipeline.
   SyncArtifactsPolicy:
-    Condition: DeployIsReady
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       ManagedPolicyName: CrossAccountPipelineSyncArtifacts
@@ -137,25 +100,15 @@ Resources:
             Resource:
               - !GetAtt KMSKey.Arn
           - Action:
-              - 's3:*'
-            Effect: Allow
-            Resource:
-              'Fn::Split':
-                - ','
-                - !Ref PipelineBucketStarArns
-          - Action:
-              - 'kms:*'
-            Effect: Allow
-            Resource:
-              'Fn::Split':
-                - ','
-                - !Ref PipelineCMKs
-          - Action:
-              - 'codepipeline:*'
+              - 'codepipeline:*' # pretty sure this doesn't need to be star.
             Effect: Allow
             Resource: '*'
+
+  # This function takes the artifacts supplied to it and makes sure they are
+  # available in the requested region. This function should be called from
+  # CodePipeline. The CodePipeline step should include all the input artifacts
+  # that will be needed in the destination region.
   SyncArtifactsFunction:
-    Condition: DeployIsReady
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
@@ -270,8 +223,9 @@ Resources:
       Role: !GetAtt SyncArtifactsRole.Arn
       Runtime: nodejs10.x
       Timeout: 30
+
+  # Basic permissions to allow CodePipeline to call the sync function.
   SyncArtifactsLambdaPermission:
-    Condition: DeployIsReady
     Type: 'AWS::Lambda::Permission'
     Properties:
       Action: 'lambda:InvokeFunction'
@@ -279,8 +233,9 @@ Resources:
       Principal: codepipeline.amazonaws.com
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:*'
+
+  # Role for the replication function.
   ReplicationRole:
-    Condition: DeployIsReady
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: CrossAccountPipelineS3Replication
@@ -294,8 +249,9 @@ Resources:
       ManagedPolicyArns:
         - !Ref ReplicationPolicy
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+  # This policy allows the replication function to read data from the build bucket.
   ReplicationPolicy:
-    Condition: DeployIsReady
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       ManagedPolicyName: CrossAccountPipelineS3Replication
@@ -321,32 +277,17 @@ Resources:
               - 'kms:Decrypt'
             Effect: Allow
             Resource: !GetAtt KMSKey.Arn
-          - 'Fn::If':
-              - ReplicationIsEnabled
-              - Action:
-                  - 's3:*'
-                Effect: Allow
-                Resource:
-                  'Fn::Split':
-                    - ','
-                    - !Ref ReplicationBucketStarArns
-              - !Ref 'AWS::NoValue'
-          - 'Fn::If':
-              - ReplicationIsEnabled
-              - Action:
-                  - 'kms:*'
-                Effect: Allow
-                Resource:
-                  'Fn::Split':
-                    - ','
-                    - !Ref ReplicationCMKs
-              - !Ref 'AWS::NoValue'
+
+  # This function is triggered on created objects in the build bucket and copies the objects to
+  # the developer accounts.
   ReplicationFunction:
-    Condition: DeployIsReady
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
         ZipFile:
+          # Modify this function to get the bucket list from somewhere else (parameter store?)
+          # This will allow the replication to always be on, and an custom resource can add
+          # replication buckets to that location
           'Fn::Join':
             - |+
 
@@ -413,17 +354,15 @@ Resources:
               - '  });'
               - '}'
       Description: Copies data from on S3 bucket to a list of destination buckets.
-      Environment:
-        Variables:
-          DEST_BUCKETS: !Ref ReplicationBucketList
       FunctionName: S3DataReplicator
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt ReplicationRole.Arn
       Runtime: nodejs10.x
       Timeout: 30
+
+  # Basic permissions to allow the replication function to be triggered by the build bucket.
   ReplicationLambdaPermission:
-    Condition: DeployIsReady
     Type: 'AWS::Lambda::Permission'
     Properties:
       Action: 'lambda:InvokeFunction'
@@ -434,9 +373,18 @@ Resources:
         'Fn::Sub':
           - 'arn:aws:s3:::${Bucket}'
           - Bucket: !ImportValue BuildBucket
+
+  # This is the bucket where build artifacts are put. CodeBuild should place
+  # things here, and CodePipeline should trigger off specific artifacts.
+  # This bucket's artifacts will be replicated to developer accounts.
   BuildBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:
@@ -444,39 +392,168 @@ Resources:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
               SSEAlgorithm: 'aws:kms'
-      NotificationConfiguration:
-        'Fn::If':
-          - ReplicationIsEnabled
-          - LambdaConfigurations:
-              - Event: 's3:ObjectCreated:*'
-                Function: !ImportValue ReplicationFunctionArn
-          - !Ref 'AWS::NoValue'
+
+  # This is the bucket that is used for CodePipeline, in the primary region
   PipelineBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
               SSEAlgorithm: 'aws:kms'
+
+  # Grant access to the cross account CloudFormation and CodePipeline roles within the deployment organization
   PipelineBucketPolicy:
-    Condition: DeployIsReady
     Type: 'AWS::S3::BucketPolicy'
     Properties:
       Bucket: !Ref PipelineBucket
       PolicyDocument:
         Statement:
           - Action:
-              - 's3:*'
+              - 's3:*' # TODO: this doesn't need to be star
             Effect: Allow
             Resource:
               - !Sub 'arn:aws:s3:::${PipelineBucket}'
               - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+            Principal: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCloudFormation
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+          - Action:
+              - 's3:*' # TODO: this doesn't need to be star
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+            Principal: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCodePipeline
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+
+  # This role is only to allow the custom resource for adding a bucket notification
+  # to the build bucket whilst avoiding the circular reference issue.
+  ApplyNotificationFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
             Principal:
-              AWS:
-                'Fn::Split':
-                  - ','
-                  - !Ref PipelineBucketAccessRoleArns
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+        - PolicyName: S3BucketNotificationPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AllowBucketNotification
+                Effect: Allow
+                Action: s3:PutBucketNotification
+                Resource:
+                  - !Sub 'arn:aws:s3:::${BuildBucket}'
+                  - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+
+  # This function is for adding a bucket notification to the build bucket whilst avoiding
+  # the circular reference issue. It is only called during deployment of this stack.
+  ApplyBucketNotificationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Dummy function, just logs the received event
+      Handler: index.handler
+      Runtime: python2.7
+      Role: !GetAtt 'ApplyNotificationFunctionRole.Arn'
+      Timeout: 240
+      Code:
+        ZipFile: |
+          import boto3
+          import logging
+          import json
+          import cfnresponse
+
+          s3Client = boto3.client('s3')
+          logger = logging.getLogger()
+          logger.setLevel(logging.DEBUG)
+
+          def addBucketNotification(bucketName, notificationId, functionArn):
+            notificationResponse = s3Client.put_bucket_notification_configuration(
+              Bucket=bucketName,
+              NotificationConfiguration={
+                'LambdaFunctionConfigurations': [
+                  {
+                    'Id': notificationId,
+                    'LambdaFunctionArn': functionArn,
+                    'Events': [
+                      's3:ObjectCreated:*'
+                    ]
+                  },
+                ]
+              }
+            )
+            return notificationResponse
+
+          def create(properties, physical_id):
+            bucketName = properties['S3Bucket']
+            notificationId = properties['NotificationId']
+            functionArn = properties['FunctionARN']
+            response = addBucketNotification(bucketName, notificationId, functionArn)
+            logger.info('AddBucketNotification response: %s' % json.dumps(response))
+            return cfnresponse.SUCCESS, physical_id
+
+          def update(properties, physical_id):
+            return cfnresponse.SUCCESS, None
+
+          def delete(properties, physical_id):
+            return cfnresponse.SUCCESS, None
+
+          def handler(event, context):
+            logger.info('Received event: %s' % json.dumps(event))
+
+            status = cfnresponse.FAILED
+            new_physical_id = None
+
+            try:
+              properties = event.get('ResourceProperties')
+              physical_id = event.get('PhysicalResourceId')
+
+              status, new_physical_id = {
+                'Create': create,
+                'Update': update,
+                'Delete': delete
+              }.get(event['RequestType'], lambda x, y: (cfnresponse.FAILED, None))(properties, physical_id)
+            except Exception as e:
+              logger.error('Exception: %s' % e)
+              status = cfnresponse.FAILED
+            finally:
+              cfnresponse.send(event, context, status, {}, new_physical_id)
+
+  # This custom resource creates the notification on the build bucket so that we can
+  # trigger a lambda whenever something is created in the build bucket.
+  # This is a custom resource because of the circular reference issue that is caused
+  # by trying to do this inline.
+  ApplyNotification:
+    Type: Custom::ApplyNotification
+    Properties:
+      ServiceToken: !GetAtt 'ApplyBucketNotificationFunction.Arn'
+      S3Bucket: !Ref BuildBucket
+      FunctionARN: !GetAtt ReplicationFunction.Arn
+      NotificationId: S3ObjectCreatedEvent
+
 Outputs:
   CMK:
     Description: The CMK that is used for cross account access
@@ -494,24 +571,25 @@ Outputs:
     Export:
       Name: PipelineBucket
   SyncArtifactsFunction:
-    Condition: DeployIsReady
     Description: The function for syncing artifacts
     Value: !Ref SyncArtifactsFunction
     Export:
       Name: SyncArtifactsFunction
   SyncArtifactsFunctionArn:
-    Condition: DeployIsReady
     Description: The function for syncing artifacts
     Value: !GetAtt SyncArtifactsFunction.Arn
     Export:
       Name: SyncArtifactsFunctionArn
   ReplicationFunctionArn:
-    Condition: DeployIsReady
     Description: The function for replication build artifacts
     Value: !GetAtt ReplicationFunction.Arn
     Export:
       Name: ReplicationFunctionArn
   ReplicationRoleArn:
-    Condition: DeployIsReady
     Description: The role used for replication.
     Value: !GetAtt ReplicationRole.Arn
+  ApplyBucketNotificationFunctionArn:
+    Description: The ARN of the function to apply a bucket notification to the build bucket
+    Value: !GetAtt ApplyBucketNotificationFunction.Arn
+    Export:
+      Name: ApplyBucketNotificationFunctionArn

@@ -1,11 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Cross account regional stack.
 Parameters:
-  RootAccountArns:
-    Description: 'A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::${AccountId}:root). This should include the build account.'
-    Type: String
-  PipelineBucketAccessRoleArns:
-    Description: "A comma separated list of ARNs representing the roles for that should have access to the artifact bucket. This typically includes the 'CrossAccountCodePipeline' (arn:aws:iam::${AccountId}:role/CrossAccountCodePipeline) and 'CrossAccountCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation) roles."
+  DeploymentOrgPath:
     Type: String
 Resources:
   KMSKey:
@@ -40,13 +36,23 @@ Resources:
               - 'kms:GenerateDataKey*'
               - 'kms:DescribeKey'
             Resource: '*'
-          - Sid: Allow use of the key for CryptoGraphy Lambda
-            Effect: Allow
-            Principal:
-              AWS:
-                'Fn::Split':
-                  - ','
-                  - !Ref RootAccountArns
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCodePipeline
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+          - Effect: Allow
+            Principal: !Sub 'arn:aws:iam::${AWS::AccountId}:role/CrossAccountPipelineSyncArtifacts'
             Action:
               - 'kms:Encrypt'
               - 'kms:Decrypt'
@@ -67,7 +73,7 @@ Resources:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
               SSEAlgorithm: 'aws:kms'
-  S3BucketPolicy:
+  ArtifactBucketPolicy:
     Type: 'AWS::S3::BucketPolicy'
     Properties:
       Bucket: !Ref ArtifactBucket
@@ -79,11 +85,33 @@ Resources:
             Resource:
               - !Sub 'arn:aws:s3:::${ArtifactBucket}'
               - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
-            Principal:
-              AWS:
-                'Fn::Split':
-                  - ','
-                  - !Ref PipelineBucketAccessRoleArns
+            Principal: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCloudFormation
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
+            Principal: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCodePipeline
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
+            Principal: !Sub 'arn:aws:iam::${AWS::AccountId}:role/CrossAccountPipelineSyncArtifacts'
 Outputs:
   CMK:
     Description: The CMK that is used for cross account access
@@ -93,3 +121,5 @@ Outputs:
   PipelineBucket:
     Description: The bucket for artifacts
     Value: !Ref ArtifactBucket
+    Export:
+      Name: PipelineBucket

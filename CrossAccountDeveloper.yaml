@@ -1,14 +1,87 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Cross account developer stack.
 Parameters:
-  ReplicationFunctionRoleArn:
-    Description: The ARN of the replication function role in the main account.
+  BuildAccountId:
     Type: String
 Resources:
+  # The KMS key must allow the build account to have access to encrypt data for S3 build artifact syncing
+  KMSKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: Used by Assumed Roles in deploy accounts to Encrypt/Decrypt code
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: !Ref 'AWS::StackName'
+        Statement:
+          - Sid: Allows admin of the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - 'kms:Create*'
+              - 'kms:Describe*'
+              - 'kms:Enable*'
+              - 'kms:List*'
+              - 'kms:Put*'
+              - 'kms:Update*'
+              - 'kms:Revoke*'
+              - 'kms:Disable*'
+              - 'kms:Get*'
+              - 'kms:Delete*'
+              - 'kms:ScheduleKeyDeletion'
+              - 'kms:CancelKeyDeletion'
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${BuildAccountId}:root
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+
+  KMSAlias:
+    Type: 'AWS::KMS::Alias'
+    Properties:
+      AliasName: alias/codepipeline-crossaccounts
+      TargetKeyId: !Ref KMSKey
+  ManualInterventionTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      DisplayName: Topic for pipeline manual intervention notifications
+      TopicName: PipelineManualIntervention
+  BuildBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !GetAtt KMSKey.Arn
+              SSEAlgorithm: 'aws:kms'
+  PipelineBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !GetAtt KMSKey.Arn
+              SSEAlgorithm: 'aws:kms'
+
+  # Allow the build account to have access to the build bucket for replication of build artifacts
   BuildBucketPolicy:
     Type: 'AWS::S3::BucketPolicy'
     Properties:
-      Bucket: !ImportValue BuildBucket
+      Bucket: !Ref BuildBucket
       PolicyDocument:
         Statement:
           - Action:
@@ -17,9 +90,26 @@ Resources:
             Resource:
               - 'Fn::Sub':
                   - 'arn:aws:s3:::${Bucket}'
-                  - Bucket: !ImportValue BuildBucket
+                  - Bucket: !Ref BuildBucket
               - 'Fn::Sub':
                   - 'arn:aws:s3:::${Bucket}/*'
-                  - Bucket: !ImportValue BuildBucket
+                  - Bucket: !Ref BuildBucket
             Principal:
-              AWS: !Ref ReplicationFunctionRoleArn
+              AWS: !Sub arn:aws:iam::${BuildAccountId}:root
+
+Outputs:
+  CMK:
+    Description: The CMK that is used for cross account access
+    Value: !GetAtt KMSKey.Arn
+    Export:
+      Name: CrossAccountCMK
+  BuildBucket:
+    Description: The bucket for the builds
+    Value: !Ref BuildBucket
+    Export:
+      Name: BuildBucket
+  PipelineBucket:
+    Description: The bucket for the pipeline
+    Value: !Ref PipelineBucket
+    Export:
+      Name: PipelineBucket

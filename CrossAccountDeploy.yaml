@@ -4,9 +4,6 @@ Parameters:
   BuildAccount:
     Description: AWS AccountNumber for the Build Account
     Type: Number
-  CMKARNs:
-    Description: Comma separated list of ARNs of the KMS CMKs created in the Build Account
-    Type: String
 Resources:
   CrossAccountCodePipelineRole:
     Type: 'AWS::IAM::Role'
@@ -36,12 +33,6 @@ Resources:
               - 'iam:PassRole'
               - 'lambda:invoke*'
             Resource: '*'
-          - Effect: Allow
-            Action: 'kms:*'
-            Resource:
-              'Fn::Split':
-                - ','
-                - !Ref CMKARNs
   CrossAccountCloudFormationRole:
     Type: 'AWS::IAM::Role'
     Properties:

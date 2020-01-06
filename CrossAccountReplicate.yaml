@@ -1,0 +1,491 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cross account developer replication stack.
+Parameters:
+  DeveloperOrgPath:
+    Type: String
+Resources:
+  # this table is used to manage where to replicate the build artifacts to
+  Table:
+    Type: 'AWS::DynamoDB::Table'
+    Properties:
+      TableName: CrossAccountBuildReplication
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1_pk
+          AttributeType: S
+        - AttributeName: gsi1_sk
+          AttributeType: S
+      BillingMode: PAY_PER_REQUEST
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1
+          KeySchema:
+            - AttributeName: gsi1_pk
+              KeyType: HASH
+            - AttributeName: gsi1_sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+
+  # Role for the replication registration function.
+  ReplicationRegistrationRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccountPipelineS3ReplicationRegistration
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref ReplicationRegistrationPolicy
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole' # I don't really like this policy
+
+  # This policy allows the replication registration function to read/write data in the DynamoDB table
+  ReplicationRegistrationPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: CrossAccountPipelineS3ReplicationRegistration
+      Description: Policy for replicating S3 data for developer account pipelines
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'dynamodb:DeleteItem'
+              - 'dynamodb:GetItem'
+              - 'dynamodb:PutItem'
+              - 'dynamodb:Query'
+              - 'dynamodb:UpdateItem' # not sure we will use this one, but it's a permission I'm okay granting
+            Effect: Allow
+            Resource:
+              - !GetAtt Table.Arn
+              - 'Fn::Sub':
+                  - '${Arn}/index/*'
+                  - Arn: !GetAtt Table.Arn
+
+  ReplicationRegistrationFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        # Modify this function handle the registration request and add/remove the record in the table
+        ZipFile: |
+          import sys, boto3, json, urllib, urllib2, json
+          client = boto3.client('route53')
+
+          def lambda_handler(event, context):
+            #SNS events contain a wrapper around the Lambda event. Unpack the
+            #lambda event from SNS. Delete this part if calling lambda directly.
+            print("SNS Event: " + json.dumps(event))
+            event = json.loads(event['Records'][0]['Sns']['Message'])
+            print("Lambda Event: " + json.dumps(event))
+
+            try:
+              hostedzone = '${HostedZone}'
+              type = event['RequestType']
+              source = event['ResourceProperties']['Source']
+              target = event['ResourceProperties']['Target']
+
+              if type == 'Create':
+                print "Creating CNAME " + source + "->" + target + " in " + hostedzone
+                change_resource_record_sets('UPSERT', hostedzone, source, target)
+              elif type == 'Update':
+                oldsource = event['OldResourceProperties']['Source']
+                oldtarget = event['OldResourceProperties']['Target']
+                print "Deleting old CNAME " + oldsource + "->" + oldtarget + " in " + hostedzone
+                change_resource_record_sets('DELETE', hostedzone, oldsource, oldtarget)
+                print "Creating new CNAME " + source + "->" + target + " in " + hostedzone
+                change_resource_record_sets('UPSERT', hostedzone, source, target)
+              elif type == 'Delete':
+                print "Deleting CNAME " + source + "->" + target + " in " + hostedzone
+                change_resource_record_sets('DELETE', hostedzone, source, target)
+              else:
+                print "Unexpected Request Type"
+                raise Exception("Unexpected Request Type")
+
+              print "Completed successfully"
+              responseStatus = 'SUCCESS'
+              responseData = {}
+              sendResponse(event, context, responseStatus, responseData)
+
+            except:
+              print("Error:", sys.exc_info()[0])
+              responseStatus = 'FAILED'
+              responseData = {}
+              sendResponse(event, context, responseStatus, responseData)
+
+
+          def change_resource_record_sets(action, hostedzone, source, target):
+            response = client.change_resource_record_sets(
+              HostedZoneId=hostedzone,
+              ChangeBatch= {
+                'Comment': 'CNAME %s -> %s' % (source, target),
+                'Changes': [{
+                  'Action': action,
+                  'ResourceRecordSet': {
+                    'Name': source,
+                    'Type': 'CNAME',
+                    'TTL': 300,
+                    'ResourceRecords': [{'Value': target}]
+                  }
+                }]
+              }
+            )
+
+          def sendResponse(event, context, responseStatus, responseData):
+            data = json.dumps({
+              'Status': responseStatus,
+              'Reason': 'See the details in CloudWatch Log Stream: ' + context.log_stream_name,
+              'PhysicalResourceId': context.log_stream_name,
+              'StackId': event['StackId'],
+              'RequestId': event['RequestId'],
+              'LogicalResourceId': event['LogicalResourceId'],
+              'Data': responseData
+            })
+            print event['ResponseURL']
+            print data
+            opener = urllib2.build_opener(urllib2.HTTPHandler)
+            request = urllib2.Request(url=event['ResponseURL'], data=data)
+            request.add_header('Content-Type', '')
+            request.get_method = lambda: 'PUT'
+            url = opener.open(request)
+      Description: Registers a bucket in a developer account for replication
+      FunctionName: CrossAccountReplicationRegistration
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt ReplicationRegistrationRole.Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+
+  # topic to use as the endpoint for custom resources to register for replication
+  ReplicationRegistrationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint: !GetAtt ReplicationRegistrationFunction.Arn
+          Protocol: lambda
+      TopicName: BuildArtifactReplicationRegistration
+
+  # This policy allows any account within the developer org to call the SNS topic
+  ReplicationRegistrationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ReplicationRegistrationTopic
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - sns:Publish
+            Resource: !Ref ReplicationRegistrationFunction
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCloudFormation
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeveloperOrgPath
+
+  # permission for the SNS topic to call the lambda function
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref ReplicationRegistrationTopic
+      FunctionName: !GetAtt ReplicationRegistrationFunction.Arn
+
+  # Role for the replication function.
+  ReplicationRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccountPipelineS3Replication
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref ReplicationPolicy
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+  # This policy allows the replication function to read data from the build bucket.
+  ReplicationPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: CrossAccountPipelineS3Replication
+      Description: Policy for replicating S3 data for developer account pipelines
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 's3:ListBucket'
+            Effect: Allow
+            Resource:
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}'
+                  - Bucket: !ImportValue BuildBucket
+          - Action:
+              - 's3:Get*'
+            Effect: Allow
+            Resource:
+              - 'Fn::Sub':
+                  - 'arn:aws:s3:::${Bucket}/*'
+                  - Bucket: !ImportValue BuildBucket
+          - Action:
+              - 'kms:Decrypt'
+            Effect: Allow
+            Resource: !ImportValue CrossAccountCMK
+          - Action:
+              - 'dynamodb:GetItem'
+              - 'dynamodb:Query'
+            Effect: Allow
+            Resource:
+              - !GetAtt Table.Arn
+              - 'Fn::Sub':
+                  - '${Arn}/index/*'
+                  - Arn: !GetAtt Table.Arn
+
+  # This function is triggered on created objects in the build bucket and copies the objects to
+  # the developer accounts.
+  ReplicationFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Code:
+        ZipFile:
+          # Modify this function to get the bucket list from the above DynamoDB table
+          'Fn::Join':
+            - |+
+
+            - - const aws = require('aws-sdk');
+              - "const s3 = new aws.S3({region: 'us-east-1'});"
+              - const path = require('path');
+              - ''
+              - "const destBuckets = process.env.DEST_BUCKETS.split(',');"
+              - ''
+              - 'exports.handler = function main(event, context) {'
+              - '  // Fail on missing data'
+              - '  if (!destBuckets) {'
+              - "    context.fail('Error: Environment variable DEST_BUCKETS missing');"
+              - '    return;'
+              - '  }'
+              - '  if (event.Records === null) {'
+              - "    context.fail('Error: Event has no records.');"
+              - '    return;'
+              - '  }'
+              - '  // Make a task for each combination of record and destBucket'
+              - '  let tasks = [];'
+              - '  for (let i = 0; i < event.Records.length; i++) {'
+              - '    for (let j = 0; j < destBuckets.length; j++) {'
+              - '      tasks.push(replicatePromise(event.Records[i], destBuckets[j]));'
+              - '    }'
+              - '  }'
+              - ''
+              - '  Promise.all(tasks)'
+              - '    .then(() => { context.succeed();'
+              - '    })'
+              - '    .catch(() => { context.fail();'
+              - '    });'
+              - '};'
+              - ''
+              - 'function replicatePromise(record, destBucket) {'
+              - '  return new Promise((resolve, reject) => {'
+              - '    // The source bucket and source key are part of the event data'
+              - '    var srcBucket = record.s3.bucket.name;'
+              - '    var srcKey = decodeURIComponent(record.s3.object.key.replace(/\+/g," "));'
+              - '    var srcVersion = record.s3.object.version;'
+              - ''
+              - '    // Modify destKey if an alternate copy location is preferred'
+              - '    var destKey = srcKey;'
+              - "    var msg = 'copying ' + srcBucket + ':' + srcKey + ' to ' + destBucket + ':' + destKey;"
+              - ''
+              - "    console.log('Attempting: ' + msg);"
+              - '    s3.copyObject({'
+              - '      Bucket: destBucket,'
+              - '      Key: destKey,'
+              - "      ACL: 'bucket-owner-full-control',"
+              - "      CopySource: encodeURIComponent(srcBucket + '/' + srcKey + (srcVersion ? ('?versionId=' + srcVersion) : '')),"
+              - "      MetadataDirective: 'COPY'"
+              - '    }, (err, data) => {'
+              - '      if (err) {'
+              - "        console.log('Error:' + msg);"
+              - '        console.log(err, err.stack); // an error occurred'
+              - "        return reject('Error:' + msg);"
+              - '      }'
+              - '      else {'
+              - "        console.log('Success: ' + msg);"
+              - "        return resolve('Success: ' + msg);"
+              - '      }'
+              - '    });'
+              - '  });'
+              - '}'
+      Description: Copies data from on S3 bucket to a list of destination buckets.
+      FunctionName: S3DataReplicator
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt ReplicationRole.Arn
+      Runtime: nodejs10.x
+      Timeout: 30
+
+  # Basic permissions to allow the replication function to be triggered by the build bucket.
+  ReplicationLambdaPermission:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      Action: 'lambda:InvokeFunction'
+      FunctionName: !Ref ReplicationFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn:
+        'Fn::Sub':
+          - 'arn:aws:s3:::${Bucket}'
+          - Bucket: !ImportValue BuildBucket
+
+  # This role is only to allow the custom resource for adding a bucket notification to the
+  # build bucket. This is a custom resource because bucket notification is part of the bucket
+  # definition, which we don't control here, so we need to add it via an API call instead.
+  ApplyNotificationFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Path: /
+      Policies:
+        - PolicyName: S3BucketNotificationPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: AllowBucketNotification
+                Effect: Allow
+                Action: s3:PutBucketNotification
+                Resource:
+                  - 'Fn::Sub':
+                      - 'arn:aws:s3:::${Bucket}'
+                      - Bucket: !ImportValue BuildBucket
+                  - 'Fn::Sub':
+                      - 'arn:aws:s3:::${Bucket}/*'
+                      - Bucket: !ImportValue BuildBucket
+
+  # This function is for adding a bucket notification to the build bucket. This is a custom
+  # resource because bucket notification is part of the bucket definition, which we don't control
+  # here, so we need to add it via an API call instead. It is only called during deployment of this
+  # stack.
+  ApplyBucketNotificationFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Description: Dummy function, just logs the received event
+      Handler: index.handler
+      Runtime: python2.7
+      Role: !GetAtt 'ApplyNotificationFunctionRole.Arn'
+      Timeout: 240
+      Code:
+        ZipFile: |
+          import boto3
+          import logging
+          import json
+          import cfnresponse
+
+          s3Client = boto3.client('s3')
+          logger = logging.getLogger()
+          logger.setLevel(logging.DEBUG)
+
+          def addBucketNotification(bucketName, notificationId, functionArn):
+            notificationResponse = s3Client.put_bucket_notification_configuration(
+              Bucket=bucketName,
+              NotificationConfiguration={
+                'LambdaFunctionConfigurations': [
+                  {
+                    'Id': notificationId,
+                    'LambdaFunctionArn': functionArn,
+                    'Events': [
+                      's3:ObjectCreated:*'
+                    ]
+                  },
+                ]
+              }
+            )
+            return notificationResponse
+
+          def create(properties, physical_id):
+            bucketName = properties['S3Bucket']
+            notificationId = properties['NotificationId']
+            functionArn = properties['FunctionARN']
+            response = addBucketNotification(bucketName, notificationId, functionArn)
+            logger.info('AddBucketNotification response: %s' % json.dumps(response))
+            return cfnresponse.SUCCESS, physical_id
+
+          def update(properties, physical_id):
+            return cfnresponse.SUCCESS, None
+
+          def delete(properties, physical_id):
+            return cfnresponse.SUCCESS, None
+
+          def handler(event, context):
+            logger.info('Received event: %s' % json.dumps(event))
+
+            status = cfnresponse.FAILED
+            new_physical_id = None
+
+            try:
+              properties = event.get('ResourceProperties')
+              physical_id = event.get('PhysicalResourceId')
+
+              status, new_physical_id = {
+                'Create': create,
+                'Update': update,
+                'Delete': delete
+              }.get(event['RequestType'], lambda x, y: (cfnresponse.FAILED, None))(properties, physical_id)
+            except Exception as e:
+              logger.error('Exception: %s' % e)
+              status = cfnresponse.FAILED
+            finally:
+              cfnresponse.send(event, context, status, {}, new_physical_id)
+
+  # This custom resource creates the notification on the build bucket so that we can trigger a
+  # lambda whenever something is created in the build bucket. This is a custom resource because
+  # bucket notification is part of the bucket definition, which we don't control here, so we need
+  # to add it via an API call instead.
+  ApplyNotification:
+    Type: Custom::ApplyNotification
+    Properties:
+      ServiceToken: !GetAtt 'ApplyBucketNotificationFunction.Arn'
+      S3Bucket: !ImportValue BuildBucket
+      FunctionARN: !GetAtt ReplicationFunction.Arn
+      NotificationId: S3ObjectCreatedEvent
+
+Outputs:
+  ReplicationFunctionArn:
+    Description: The function for replication build artifacts
+    Value: !GetAtt ReplicationFunction.Arn
+    Export:
+      Name: ReplicationFunctionArn
+  ReplicationRoleArn:
+    Description: The role used for replication.
+    Value: !GetAtt ReplicationRole.Arn
+  ApplyBucketNotificationFunctionArn:
+    Description: The ARN of the function to apply a bucket notification to the build bucket
+    Value: !GetAtt ApplyBucketNotificationFunction.Arn
+    Export:
+      Name: ApplyBucketNotificationFunctionArn
+  ReplicationRegistrationTopicArn:
+    Description: The ARN of the SNS topic that is used as the 'ServiceToken' of the custom resources
+    Value: !Ref ReplicationRegistrationTopic
+    Export:
+      Name: ReplicationRegistrationTopicArn

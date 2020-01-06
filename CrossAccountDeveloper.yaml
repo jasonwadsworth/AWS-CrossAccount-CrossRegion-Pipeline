@@ -3,6 +3,8 @@ Description: Cross account developer stack.
 Parameters:
   BuildAccountId:
     Type: String
+  ReplicationRegistrationTopicArn:
+    Type: String
 Resources:
   # The KMS key must allow the build account to have access to encrypt data for S3 build artifact syncing
   KMSKey:
@@ -39,7 +41,7 @@ Resources:
             Resource: '*'
           - Effect: Allow
             Principal:
-              AWS: !Sub arn:aws:iam::${BuildAccountId}:root
+              AWS: !Sub arn:aws:iam::${BuildAccountId}:root # we can probably scope this down to the replication role in the build account
             Action:
               - 'kms:Encrypt'
               - 'kms:Decrypt'
@@ -85,7 +87,7 @@ Resources:
       PolicyDocument:
         Statement:
           - Action:
-              - 's3:*'
+              - 's3:*' # I don't think the replication needs full S3 control, so this can probably be scoped down
             Effect: Allow
             Resource:
               - 'Fn::Sub':
@@ -95,7 +97,17 @@ Resources:
                   - 'arn:aws:s3:::${Bucket}/*'
                   - Bucket: !Ref BuildBucket
             Principal:
-              AWS: !Sub arn:aws:iam::${BuildAccountId}:root
+              AWS: !Sub arn:aws:iam::${BuildAccountId}:root # we can probably scope this down to the replication role in the build account
+
+  # This custom resource creates the notification on the build bucket so that we can trigger a
+  # lambda whenever something is created in the build bucket. This is a custom resource because
+  # bucket notification is part of the bucket definition, which we don't control here, so we need
+  # to add it via an API call instead.
+  RegisterForReplication:
+    Type: Custom::RegisterForReplication
+    Properties:
+      ServiceToken: !Ref ReplicationRegistrationTopicArn
+      S3Bucket: !ImportValue BuildBucket
 
 Outputs:
   CMK:

@@ -27,11 +27,11 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - 'codebuild:*'
-              - 'cloudformation:*'
-              - 's3:*'
-              - 'iam:PassRole'
-              - 'lambda:invoke*'
+              - 'codebuild:*' # this is only needed if you are including a CodeBuild step in your pipeline
+              - 'cloudformation:*' # we may be able to tune this down a little, but not much
+              - 's3:*' # this shouldn't need * access to S3, and certainly not to all buckets
+              - 'iam:PassRole' # I believe this only needs to be able to pass role to the CrossAccountCloudFormation role
+              - 'lambda:invoke*' # this should only allow invoking lambda's that are being called in the pipeline - we will need a naming convention
             Resource: '*'
   CrossAccountCloudFormationRole:
     Type: 'AWS::IAM::Role'
@@ -45,7 +45,7 @@ Resources:
               Service: cloudformation.amazonaws.com
       ManagedPolicyArns:
         - !Ref CrossAccountCloudFormationPolicy
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
+        - 'arn:aws:iam::aws:policy/AdministratorAccess' # this isn't the policy we want here - we really need to clean up the CrossAccountCloudFormationPolicy and make it do what we need it to do
   CrossAccountCloudFormationPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:

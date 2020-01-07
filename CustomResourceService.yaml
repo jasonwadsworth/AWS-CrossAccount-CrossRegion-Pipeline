@@ -1,0 +1,245 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation Custom Resource as a Service
+Resources:
+  CustomResourceDeliveryFailureQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: CustomResourceDeliveryFailure
+
+  CustomResourceDeliveryFailureQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: sqs.amazonaws.com
+            Action: sqs:SendMessage
+            Resource: !Ref CustomResourceDeliveryFailureQueue
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Ref CustomResourceSnsTopic
+      Queues:
+        - !Ref CustomResourceDeliveryFailureQueue
+
+  CustomResourceSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: CloudFormationCustomResourceService
+
+  CustomResourceStartRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CloudFormationCustomResourceService-StateMachine
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref StateMachinePolicy
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+  CustomResourceStartLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: CloudFormationCustomResourceService-Start
+      Runtime: nodejs10.x
+      Role: !GetAtt CustomResourceStartRole.Arn
+      Handler: index.handler
+      Code:
+        ZipFile: !Sub |-
+          const AWS = require('aws-sdk');
+
+          const stepFunctions = new AWS.StepFunctions();
+
+          exports.handler = async (event) => {
+              if (event.Records) {
+                  for (const record of event.Records) {
+                      const messageJson = JSON.parse(record.Sns.Message);
+
+                      await startStateMachine(record.Sns.Message, messageJson.RequestId);
+                  }
+              }
+              else {
+                  await startStateMachine(JSON.stringify(event), event.RequestId);
+              }
+          };
+
+          async function startStateMachine(input, requestId) {
+              const params = {
+                  stateMachineArn: 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:CloudFormationCustomResourceService-StateMachine',
+                  input: input,
+                  name: requestId
+              };
+
+              try {
+                  await stepFunctions.startExecution(params).promise();
+              }
+              catch (ExecutionAlreadyExists) {
+                  // TODO: we are currently eating this error, assuming that it's a duplicate call and thus the first call will suffice
+                  console.warn('Tried to run an execution that was already run. Ignoring. ' + requestId);
+              }
+          }
+
+  LambdaResourcePolicy:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CustomResourceStartLambda
+      Principal: sns.amazonaws.com,
+      Action: lambda:InvokeFunction,
+      SourceArn: !Ref CustomResourceSnsTopic
+
+  Subscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref CustomResourceStartLambda
+      Protocol: lambda
+      RawMessageDelivery: false
+      TopicArn: !Ref CustomResourceSnsTopic
+      RedrivePolicy:
+        deadLetterTargetArn: !Ref CustomResourceDeliveryFailureQueue
+
+  # Role for the state machine.
+  StateMachineRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CloudFormationCustomResourceService-StateMachine
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - !Ref StateMachinePolicy
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+
+  # This policy gives the state machine permission to call the lambda functions and the failure SNS topic
+  StateMachinePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: CloudFormationCustomResourceService-StateMachine
+      Description: Policy for the state machine
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'lambda:InvokeFunction'
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:CloudFormationCustomResourceService-CallEndpoint
+              - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:CloudFormationCustomResourceService-Response
+          - Action:
+              - sns:Publish
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:CloudFormationCustomResourceService-ResponseFailed
+
+  # this topic is used for notifications on failures when setting the response. these failures are
+  # critical because someone's CloudFormation will not complete until the response is written.
+  ResponseFailedSnsTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: CloudFormationCustomResourceService-ResponseFailed
+
+  # this state machine calls a lambda to perform the custom resource action, passing in all the
+  # information supplied by the custom resource. the lambda will call the endpoint repeatedly (with
+  # a 15 second delay) until the endpoint returns a success/failure of the custom resource or the
+  # process times out. at that point it will call another lambda to return a response to the
+  # presigned URL supplied by the custom resource call. if that call fails a message will be sent
+  # to the SNS topic to notify of a failure to respond.
+  StateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: CloudFormationCustomResourceService-StateMachine
+      DefinitionString: !Sub |-
+        {
+            "Comment": "A Catch example of the Amazon States Language using an AWS Lambda Function",
+            "StartAt": "CallEndpoint",
+            "States": {
+                "CallEndpoint": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:CloudFormationCustomResourceService-CallEndpoint",
+                    "Retry": [
+                        {
+                            "ErrorEquals": [
+                                "RetryError"
+                            ],
+                            "IntervalSeconds": 5,
+                            "MaxAttempts": 5,
+                            "BackoffRate": 2.0
+                        }
+                    ],
+                    "Catch": [
+                        {
+                            "ErrorEquals": [
+                                "States.ALL"
+                            ],
+                            "ResultPath": "$.error",
+                            "Next": "Response"
+                        }
+                    ],
+                    "Next": "CompleteCheck"
+                },
+                "CompleteCheck": {
+                    "Type": "Choice",
+                    "Choices": [
+                        {
+                            "Variable": "$.isCompleteOrFailed",
+                            "BooleanEquals": true,
+                            "Next": "Response"
+                        }
+                    ],
+                    "Default": "DelayAndRetry"
+                },
+                "DelayAndRetry": {
+                    "Type": "Wait",
+                    "Seconds": 15,
+                    "Next": "CallEndpoint"
+                },
+                "Response": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:CloudFormationCustomResourceService-Response",
+                    "Retry": [
+                        {
+                            "ErrorEquals": [
+                                "RetryError"
+                            ],
+                            "IntervalSeconds": 5,
+                            "MaxAttempts": 10,
+                            "BackoffRate": 2.0
+                        }
+                    ],
+                    "Catch": [
+                        {
+                            "ErrorEquals": [
+                                "States.ALL"
+                            ],
+                            "ResultPath": "$.error",
+                            "Next": "PublishErrorSns"
+                        }
+                    ],
+                    "End": true
+                },
+                "PublishErrorSns": {
+                    "Type": "Task",
+                    "Resource": "arn:aws:states:::sns:publish",
+                    "Parameters": {
+                        "TopicArn": "arn:aws:sns:${AWS::Region}:${AWS::AccountId}:CloudFormationCustomResourceService-ResponseFailed",
+                        "Message.$": "$"
+                    },
+                    "Next": "NotifyFailure"
+                },
+                "NotifyFailure": {
+                    "Type": "Fail",
+                    "Cause": "Unable to respond to CloudFormation",
+                    "Error": "ErrorA"
+                }
+            }
+        }
+      RoleArn: !Ref StateMachineRole

@@ -48,6 +48,18 @@ Resources:
               - 'kms:DescribeKey'
             Resource: '*'
             Condition:
+              ArnEquals:
+                aws:PrincipalArn: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccountCodePipeline
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - 'kms:Encrypt'
+              - 'kms:Decrypt'
+              - 'kms:ReEncrypt*'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+            Condition:
               ArnLike:
                 aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCodePipeline
               ForAnyValue:StringLike:
@@ -254,11 +266,6 @@ Resources:
   PipelineBucket:
     Type: 'AWS::S3::Bucket'
     Properties:
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:

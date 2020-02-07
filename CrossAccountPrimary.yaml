@@ -65,7 +65,19 @@ Resources:
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath
-
+          - Effect: Allow
+            Principal: '*'
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey*'
+              - 'kms:DescribeKey'
+            Resource: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCloudFormation
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
   KMSAlias:
     Type: 'AWS::KMS::Alias'
     Properties:
@@ -280,6 +292,16 @@ Resources:
       Bucket: !Ref PipelineBucket
       PolicyDocument:
         Statement:
+          - Action:
+              - 's3:*' # TODO: this doesn't need to be star
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+            Principal:
+              AWS:
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccountCloudFormation
+                - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccountCodePipeline
           - Action:
               - 's3:*' # TODO: this doesn't need to be star
             Effect: Allow

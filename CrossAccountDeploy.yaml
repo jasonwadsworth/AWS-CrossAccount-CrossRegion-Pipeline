@@ -33,6 +33,11 @@ Resources:
               - 'iam:PassRole' # I believe this only needs to be able to pass role to the CrossAccountCloudFormation role
               - 'lambda:invoke*' # this should only allow invoking lambda's that are being called in the pipeline - we will need a naming convention
             Resource: '*'
+          - Effect: Allow
+            Action: 'kms:*'
+            Resource:
+              - !Sub arn:aws:kms:*:${BuildAccount}:key/* # would like this to be more limited, but the other side can
+
   CrossAccountCloudFormationRole:
     Type: 'AWS::IAM::Role'
     Properties:

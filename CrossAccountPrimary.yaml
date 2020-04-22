@@ -306,17 +306,11 @@ Resources:
           - Action:
               - 's3:ListBucket'
             Effect: Allow
-            Resource:
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}'
-                  - Bucket: !ImportValue BuildBucket
+            Resource: !GetAtt BuildBucket.Arn
           - Action:
               - 's3:Get*'
             Effect: Allow
-            Resource:
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}/*'
-                  - Bucket: !ImportValue BuildBucket
+            Resource: !GetAtt BuildBucket.Arn
           - Action:
               - 'kms:Decrypt'
             Effect: Allow
@@ -430,10 +424,7 @@ Resources:
       FunctionName: !Ref ReplicationFunction
       Principal: s3.amazonaws.com
       SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn:
-        'Fn::Sub':
-          - 'arn:aws:s3:::${Bucket}'
-          - Bucket: !ImportValue BuildBucket
+      SourceArn: !GetAtt BuildBucket.Arn
   BuildBucket:
     Type: 'AWS::S3::Bucket'
     Properties:

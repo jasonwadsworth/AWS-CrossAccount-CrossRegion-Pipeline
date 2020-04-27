@@ -33,7 +33,7 @@ do
 
     parameter_name="/CrossAccountPipeline/${deploy_name}Account"
     parameter_description="The AccountId of the ${deploy_name} account for cross account pipelines."
-    aws ssm put-parameter --profile $profile --region $region --name $parameter_name --value $deploy_account_number --type "String" --no-overwrite --description $parameter_description
+    aws ssm put-parameter --profile $profile --region $region --name $parameter_name --value $deploy_account_number --type "String" --no-overwrite --description "$parameter_description"
 
     root_account_arns="${root_account_arns},arn:aws:iam::${deploy_account_number}:root"
     deploy_accounts+=( "${deploy_account_number}" )

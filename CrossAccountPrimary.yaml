@@ -468,6 +468,179 @@ Resources:
                 'Fn::Split':
                   - ','
                   - !Ref PipelineBucketAccessRoleArns
+
+  PipelineSourceRole:
+    Condition: DeployIsReady
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccount-PipelineSource
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              AWS: !Ref 'AWS::AccountId'
+      ManagedPolicyArns:
+        - !Ref PipelineSourcePolicy
+  PipelineSourcePolicy:
+    Condition: DeployIsReady
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: CrossAccount-PipelineSource
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - cloudformation:*
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${BuildBucket}'
+              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              'Fn::Split':
+                - ','
+                - !Ref PipelineBucketStarArns
+          - Action:
+              - 'kms:*'
+            Effect: Allow
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - 'kms:*'
+            Effect: Allow
+            Resource:
+              'Fn::Split':
+                - ','
+                - !Ref PipelineCMKs
+          - Action: 'lambda:*'
+            Effect: Allow
+            Resource: !GetAtt SyncArtifactsFunction.Arn
+          - Action:
+              - 'iam:PassRole'
+            Effect: Allow
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+
+  CodePipelineRole:
+    Condition: DeployIsReady
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccount-CodePipeline
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Ref 'AWS::AccountId'
+            Action: 'sts:AssumeRole'
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: codepipeline.amazonaws.com
+      ManagedPolicyArns:
+        - !Ref CodePipelinePolicy
+  CodePipelinePolicy:
+    Condition: DeployIsReady
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: CrossAccount-CodePipeline
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'codepipeline:*'
+              - 'iam:ListRoles'
+              - 'cloudformation:Describe*'
+              - 'cloudFormation:List*'
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+              - 'iam:PassRole'
+              - 's3:ListAllMyBuckets'
+              - 's3:GetBucketLocation'
+            Resource: '*'
+            Effect: Allow
+          - Action:
+              - 'sns:Publish'
+            Effect: Allow
+            Resource: !Ref ManualInterventionTopic
+          - Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey*'
+            Effect: Allow
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey*'
+            Effect: Allow
+            Resource:
+              'Fn::Split':
+                - ','
+                - !Ref PipelineCMKs
+
+          - Action:
+              - 's3:List*'
+              - 's3:Get*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${BuildBucket}'
+              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+          - Action:
+              - 's3:GetBucketPolicy'
+              - 's3:ListBucket'
+              - 's3:GetObject'
+              - 's3:PutObject'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+          - Action:
+              - 's3:GetBucketPolicy'
+              - 's3:ListBucket'
+              - 's3:GetObject'
+              - 's3:PutObject'
+            Effect: Allow
+            Resource:
+              'Fn::Split':
+                - ','
+                - !Ref PipelineBucketStarArns
+
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              - !GetAtt PipelineSourceRole.Arn
+
+          - Effect: Allow
+            Action: 'sts:AssumeRole'
+            Resource:
+              'Fn::Split':
+                - ','
+                - !Ref PipelineBucketAccessRoleArns
+
 Outputs:
   CMK:
     Description: The CMK that is used for cross account access

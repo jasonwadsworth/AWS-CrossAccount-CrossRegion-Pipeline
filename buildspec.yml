@@ -37,6 +37,7 @@ artifacts:
   files:
     - ExampleProject.yaml
     - LambdaFunction-Unit-Tests.html
+    - ExampleProjectPipelineSimple.yaml
   name: $file_name
   secondary-artifacts:
     LambdaFunction:

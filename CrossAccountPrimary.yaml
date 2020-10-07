@@ -5,7 +5,7 @@ Parameters:
     Type: String
 Resources:
   # This KMS key is for use with the cross account build/deploment. The permermissions allow the
-  # CrossAccountCodePipeline role within the deployment organization to use the key.
+  # CrossAccount-CodePipeline role within the deployment organization to use the key.
   KMSKey:
     Type: 'AWS::KMS::Key'
     Properties:
@@ -20,36 +20,8 @@ Resources:
             Principal:
               AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
             Action:
-              - 'kms:Create*'
-              - 'kms:Describe*'
-              - 'kms:Enable*'
-              - 'kms:List*'
-              - 'kms:Put*'
-              - 'kms:Update*'
-              - 'kms:Revoke*'
-              - 'kms:Disable*'
-              - 'kms:Get*'
-              - 'kms:Delete*'
-              - 'kms:ScheduleKeyDeletion'
-              - 'kms:CancelKeyDeletion'
-              - 'kms:Encrypt'
-              - 'kms:Decrypt'
-              - 'kms:ReEncrypt*'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
+              - 'kms:*'
             Resource: '*'
-          - Effect: Allow
-            Principal: '*'
-            Action:
-              - 'kms:Encrypt'
-              - 'kms:Decrypt'
-              - 'kms:ReEncrypt*'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
-            Resource: '*'
-            Condition:
-              ArnEquals:
-                aws:PrincipalArn: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccountCodePipeline
           - Effect: Allow
             Principal: '*'
             Action:
@@ -61,7 +33,7 @@ Resources:
             Resource: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCodePipeline
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CodePipeline
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath
@@ -74,7 +46,7 @@ Resources:
             Resource: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCloudFormation
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CloudFormation
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath
@@ -91,11 +63,220 @@ Resources:
       DisplayName: Topic for pipeline manual intervention notifications
       TopicName: PipelineManualIntervention
 
+  CrossAccountCodePipelineRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccount-CodePipeline
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: 'sts:AssumeRole'
+            Principal:
+              AWS: !Ref AWS::AccountId
+          - Effect: Allow
+            Action: 'sts:AssumeRole'
+            Principal:
+              Service: codepipeline.amazonaws.com
+      ManagedPolicyArns:
+        - !Ref CrossAccountCodePipelinePolicy
+
+  CrossAccountCodePipelinePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: CrossAccount-CodePipeline
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'codepipeline:*'
+              - 'iam:ListRoles'
+              - 'cloudformation:Describe*'
+              - 'cloudFormation:List*'
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+              - 's3:ListAllMyBuckets'
+              - 's3:GetBucketLocation'
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'kms:*'
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - 'sns:Publish'
+            Effect: Allow
+            Resource: !Ref ManualInterventionTopic
+          - Action:
+              - 's3:List*'
+              - 's3:Get*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${BuildBucket}'
+              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+          - Action:
+              - 'lambda:invoke*'
+            Effect: Allow
+            Resource: !GetAtt SyncArtifactsFunction.Arn
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CodePipeline
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              - arn:aws:iam::*:role/CrossAccount-CodePipeline
+              - arn:aws:iam::*:role/CrossAccount-CloudFormation
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation
+
+  CrossAccountCloudFormationRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccount-CloudFormation
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+      ManagedPolicyArns:
+        - !Ref CrossAccountCloudFormationPolicy
+        - 'arn:aws:iam::aws:policy/AdministratorAccess' # this isn't the policy we want here - we really need to clean up the CrossAccount-CloudFormationPolicy and make it do what we need it to do
+
+  CrossAccountCloudFormationPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      #Description: Policy for Cross Account CloudFormation
+      ManagedPolicyName: CrossAccount-CloudFormation
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'dynamodb:CreateTable'
+              - 'dynamodb:DeleteTable'
+              - 'dynamodb:DescribeTable'
+              - 'dynamodb:UpdateTable'
+            Effect: Allow
+            Resource:
+              - '*'
+          - Action:
+              - 'route53:ChangeResourceRecordSets'
+              - 'route53:ListResourceRecordSets'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'route53:GetChange'
+              - 'route53:GetHostedZone'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'lambda:AddPermission'
+              - 'lambda:CreateFunction'
+              - 'lambda:DeleteFunction'
+              - 'lambda:GetFunction'
+              - 'lambda:GetFunctionConfiguration'
+              - 'lambda:ListTags'
+              - 'lambda:RemovePermission'
+              - 'lambda:TagResource'
+              - 'lambda:UntagResource'
+              - 'lambda:UpdateFunction'
+              - 'lambda:UpdateFunctionCode'
+              - 'lambda:UpdateFunctionConfiguration'
+            Effect: Allow
+            Resource:
+              - '*'
+          - Action:
+              - 'logs:CreateLogGroup'
+              - 'logs:DeleteLogGroup'
+              - 'logs:DeleteMetricFilter'
+              - 'logs:DeleteRetentionPolicy'
+              - 'logs:DeleteSubscriptionFilter'
+              - 'logs:DescribeLogGroups'
+              - 'logs:DescribeMetricFilters'
+              - 'logs:DescribeSubscriptionFilters'
+              - 'logs:FilterLogEvents'
+              - 'logs:ListTagsLogGroup'
+              - 'logs:PutMetricFilter'
+              - 'logs:PutRetentionPolicy'
+              - 'logs:PutSubscriptionFilter'
+              - 'logs:TagLogGroup'
+              - 'logs:UntagLogGroup'
+            Effect: Allow
+            Resource:
+              - '*'
+          - Action:
+              - 'events:DeleteRule'
+              - 'events:DescribeRule'
+              - 'events:DisableRule'
+              - 'events:EnableRule'
+              - 'events:PutRule'
+              - 'events:RemoveTargets'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'cloudwatch:*Alarms*'
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 'iam:AttachRolePolicy'
+              - 'iam:CreateRole'
+              - 'iam:CreateServiceLinkedRole'
+              - 'iam:DeleteRole'
+              - 'iam:DeleteServiceLinkedRole'
+              - 'iam:DetachRolePolicy'
+              - 'iam:GetRole'
+              - 'iam:ListAttachedRolePolicies'
+              - 'iam:ListPolicyVersions'
+              - 'iam:ListRoleTags'
+              - 'iam:TagRole'
+              - 'iam:UntagRole'
+              - 'iam:UpdateRole'
+              - 'iam:UpdateRoleDescription'
+            Effect: Allow
+            Resource:
+              - '*'
+          - Action:
+              - 'iam:CreatePolicy'
+              - 'iam:DeletePolicy'
+              - 'iam:GetPolicy'
+              - 'iam:ListEntitiesForPolicy'
+            Effect: Allow
+            Resource:
+              - '*'
+          - Action: 'cloudformation:*'
+            Effect: Allow
+            Resource: '*'
+
   # Role for the sync artifacts function.
   SyncArtifactsRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: CrossAccountPipelineSyncArtifacts
+      RoleName: CrossAccount-PipelineSyncArtifacts
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -112,16 +293,22 @@ Resources:
   SyncArtifactsPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
-      ManagedPolicyName: CrossAccountPipelineSyncArtifacts
+      ManagedPolicyName: CrossAccount-PipelineSyncArtifacts
       Description: Policy for syncing artifact data for cross account pipelines
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Action:
-              - 'kms:Decrypt'
+              - 'kms:*'
             Effect: Allow
             Resource:
               - !GetAtt KMSKey.Arn
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
           - Action:
               - 'codepipeline:*' # pretty sure this doesn't need to be star.
             Effect: Allow
@@ -134,112 +321,109 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Code:
-        ZipFile:
-          'Fn::Join':
-            - |+
+        ZipFile: |
+          const aws = require('aws-sdk');
+          const s3 = new aws.S3({region: 'us-east-1'});
+          const codepipeline = new aws.CodePipeline();
+          const path = require('path');
 
-            - - const aws = require('aws-sdk');
-              - "const s3 = new aws.S3({region: 'us-east-1'});"
-              - const codepipeline = new aws.CodePipeline();
-              - const path = require('path');
-              - ''
-              - 'exports.handler = function main(event, context) {'
-              - '  console.log(JSON.stringify(event));'
-              - '  // Retrieve the Job ID from the Lambda action'
-              - '  let jobId = event["CodePipeline.job"].id;'
-              - '  try {'
-              - '    let data = JSON.parse(event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters);'
-              - '    let destBucket = data.DestinationBucket;'
-              - '  '
-              - '    // Make a task for each combination of record and destBucket'
-              - '    let tasks = [];'
-              - '  '
-              - '    for (var i = 0; i < event["CodePipeline.job"].data.inputArtifacts.length; i++) {'
-              - '      const sourceBucket = event["CodePipeline.job"].data.inputArtifacts[i].location.s3Location.bucketName;'
-              - '      const sourceKey = event["CodePipeline.job"].data.inputArtifacts[i].location.s3Location.objectKey;'
-              - '  '
-              - '      if (sourceBucket != destBucket)'
-              - '        tasks.push(replicatePromise(sourceBucket, sourceKey.replace(/\+/g, " "), destBucket));'
-              - '      }'
-              - '  '
-              - '    if (tasks.length != 0) {'
-              - '      Promise.all(tasks)'
-              - '        .then(() => {'
-              - "          putJobSuccess(jobId, 'Successfully synced artifacts', context);"
-              - '        })'
-              - '        .catch((e) => {'
-              - '          putJobFailure(jobId, e, context);'
-              - '        });'
-              - '    } else {'
-              - "      putJobSuccess(jobId, 'No need to sync', context);"
-              - '    }'
-              - '  }'
-              - '  catch(ex) {'
-              - '    putJobFailure(jobId, ex, context);'
-              - '  }'
-              - '};'
-              - ''
-              - ' // Notify AWS CodePipeline of a successful job'
-              - 'function putJobSuccess(jobId, message, context) {'
-              - '  var params = {'
-              - '    jobId: jobId'
-              - '  };'
-              - '  codepipeline.putJobSuccessResult(params, function(err, data) {'
-              - '    if(err) {'
-              - '      context.fail(err);'
-              - '    }'
-              - '    else {'
-              - '      context.succeed(message);'
-              - '    }'
-              - '  });'
-              - '};'
-              - ''
-              - // Notify AWS CodePipeline of a failed job
-              - 'function putJobFailure(jobId, message, context) {'
-              - '  var params = {'
-              - '    jobId: jobId,'
-              - '    failureDetails: {'
-              - '      message: JSON.stringify(message),'
-              - "      type: 'JobFailed',"
-              - '      externalExecutionId: context.invokeid'
-              - '    }'
-              - '  };'
-              - '  codepipeline.putJobFailureResult(params, function(err, data) {'
-              - '    context.fail(message);'
-              - '  });'
-              - '};'
-              - ''
-              - 'function replicatePromise(sourceBucket, sourceKey, destBucket) {'
-              - '  return new Promise((resolve, reject) => {'
-              - '    var destKey = sourceKey;'
-              - "    var msg = 'copying ' + sourceBucket + ':' + sourceKey + ' to ' + destBucket + ':' + destKey;"
-              - ''
-              - "    console.log('Attempting: ' + msg);"
-              - '    s3.copyObject({'
-              - '      Bucket: destBucket,'
-              - '      Key: destKey,'
-              - "      CopySource: encodeURIComponent(sourceBucket + '/' + sourceKey),"
-              - "      MetadataDirective: 'COPY'"
-              - '    }, (err, data) => {'
-              - '      if (err) {'
-              - "        console.log('Error:' + msg);"
-              - '        console.log(err, err.stack); // an error occurred'
-              - "        return reject('Error:' + msg);"
-              - '      } else {'
-              - "        console.log('Success: ' + msg);"
-              - "        return resolve('Success: ' + msg);"
-              - '      }'
-              - '    });'
-              - '  });'
-              - '}'
-              - ''
-              - 'function sleep(ms){'
-              - '    return new Promise(resolve=>{'
-              - '        setTimeout(resolve,ms)'
-              - '    })'
-              - '}'
+          exports.handler = function main(event, context) {
+            console.log(JSON.stringify(event));
+            // Retrieve the Job ID from the Lambda action
+            let jobId = event["CodePipeline.job"].id;
+            try {
+              let data = JSON.parse(event["CodePipeline.job"].data.actionConfiguration.configuration.UserParameters);
+              let destBucket = data.DestinationBucket;
+
+              // Make a task for each combination of record and destBucket
+              let tasks = [];
+
+              for (var i = 0; i < event["CodePipeline.job"].data.inputArtifacts.length; i++) {
+                const sourceBucket = event["CodePipeline.job"].data.inputArtifacts[i].location.s3Location.bucketName;
+                const sourceKey = event["CodePipeline.job"].data.inputArtifacts[i].location.s3Location.objectKey;
+
+                if (sourceBucket != destBucket)
+                  tasks.push(replicatePromise(sourceBucket, sourceKey.replace(/\+/g, " "), destBucket));
+                }
+
+              if (tasks.length != 0) {
+                Promise.all(tasks)
+                  .then(() => {
+                    putJobSuccess(jobId, 'Successfully synced artifacts', context);
+                  })
+                  .catch((e) => {
+                    putJobFailure(jobId, e, context);
+                  });
+              } else {
+                putJobSuccess(jobId, 'No need to sync', context);
+              }
+            }
+            catch(ex) {
+              putJobFailure(jobId, ex, context);
+            }
+          };
+
+           // Notify AWS CodePipeline of a successful job
+          function putJobSuccess(jobId, message, context) {
+            var params = {
+              jobId: jobId
+            };
+            codepipeline.putJobSuccessResult(params, function(err, data) {
+              if(err) {
+                context.fail(err);
+              }
+              else {
+                context.succeed(message);
+              }
+            });
+          };
+
+          // Notify AWS CodePipeline of a failed job
+          function putJobFailure(jobId, message, context) {
+            var params = {
+              jobId: jobId,
+              failureDetails: {
+                message: JSON.stringify(message),
+                type: 'JobFailed',
+                externalExecutionId: context.invokeid
+              }
+            };
+            codepipeline.putJobFailureResult(params, function(err, data) {
+              context.fail(message);
+            });
+          };
+
+          function replicatePromise(sourceBucket, sourceKey, destBucket) {
+            return new Promise((resolve, reject) => {
+              var destKey = sourceKey;
+              var msg = 'copying ' + sourceBucket + ':' + sourceKey + ' to ' + destBucket + ':' + destKey;
+
+              console.log('Attempting: ' + msg);
+              s3.copyObject({
+                Bucket: destBucket,
+                Key: destKey,
+                CopySource: encodeURIComponent(sourceBucket + '/' + sourceKey),
+                MetadataDirective: 'COPY'
+              }, (err, data) => {
+                if (err) {
+                  console.log('Error:' + msg);
+                  console.log(err, err.stack); // an error occurred
+                  return reject('Error:' + msg);
+                } else {
+                  console.log('Success: ' + msg);
+                  return resolve('Success: ' + msg);
+                }
+              });
+            });
+          }
+
+          function sleep(ms){
+              return new Promise(resolve=>{
+                  setTimeout(resolve,ms)
+              })
+          }
       Description: Makes sure the input artifacts are in the right bucket.
-      FunctionName: CrossAccountPipelineSyncArtifacts
+      FunctionName: CrossAccount-PipelineSyncArtifacts
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt SyncArtifactsRole.Arn
@@ -293,41 +477,91 @@ Resources:
       PolicyDocument:
         Statement:
           - Action:
-              - 's3:*' # TODO: this doesn't need to be star
+              - 's3:*'
             Effect: Allow
             Resource:
               - !Sub 'arn:aws:s3:::${PipelineBucket}'
               - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+            Principal: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CloudFormation
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+            Principal: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CodePipeline
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+
+  # This role can be used as the pipeline source in any pipeline
+  PipelineSourceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccount-PipelineSource
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: 'sts:AssumeRole'
+            Effect: Allow
             Principal:
-              AWS:
-                - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccountCloudFormation
-                - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccountCodePipeline
+              AWS: !Ref 'AWS::AccountId'
+      ManagedPolicyArns:
+        - !Ref PipelineSourcePolicy
+
+  # This policy grants the pipeline source permission to access the S3 buckets for build and pipelines
+  # as well as permission to use the KMS key, assume the CrossAccount-PipelineSource role and passrole to the CrossAccount-PipelineSource role
+  PipelineSourcePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: CrossAccount-PipelineSource
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
           - Action:
-              - 's3:*' # TODO: this doesn't need to be star
+              - cloudformation:*
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - 's3:GetBucketLocation'
+              - 's3:List*'
+              - 's3:Get*'
+              - 's3:Put*'
             Effect: Allow
             Resource:
+              - !Sub 'arn:aws:s3:::${BuildBucket}'
+              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
               - !Sub 'arn:aws:s3:::${PipelineBucket}'
               - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
-            Principal: '*'
-            Condition:
-              ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCloudFormation
-              ForAnyValue:StringLike:
-                aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
           - Action:
-              - 's3:*' # TODO: this doesn't need to be star
+              - 'kms:Decrypt'
+              - 'kms:Encrypt'
+              - 'kms:GenerateDataKey*'
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${PipelineBucket}'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
-            Principal: '*'
-            Condition:
-              ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccountCodePipeline
-              ForAnyValue:StringLike:
-                aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - 'iam:PassRole'
+            Effect: Allow
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+          - Action:
+              - lambda:InvokeFunction
+            Effect: Allow
+            Resource:
+              - !GetAtt SyncArtifactsFunction.Arn
 
 Outputs:
   CMK:
@@ -355,3 +589,8 @@ Outputs:
     Value: !GetAtt SyncArtifactsFunction.Arn
     Export:
       Name: SyncArtifactsFunctionArn
+  ManualInterventionTopicArn:
+    Description: The manual intervetion topic ARN
+    Value: !Ref ManualInterventionTopic
+    Export:
+      Name: ManualInterventionTopicArn

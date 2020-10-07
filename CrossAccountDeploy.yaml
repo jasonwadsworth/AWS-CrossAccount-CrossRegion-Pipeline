@@ -4,44 +4,113 @@ Parameters:
   BuildAccount:
     Description: AWS AccountNumber for the Build Account
     Type: Number
+  BuildAccountKMSKeyArn:
+    Description: The ARN of the KMS key used in the pipeline S3 bucket(s)
+    Type: String
+  PipelineBucket:
+    Description: The bucket used for the pipelines.
+    Type: String
+  SecondaryPipelineBucket:
+    Description: The secondary region's Pipeline bucket. This value is required if you are using a secondary region.
+    Type: String
+  SecondaryCrossAccountCMK:
+    Description: The secondary region's Cross Account CMK. This value is required if you are using a secondary region.
+    Type: String
+Conditions:
+  HasSecondaryRegion:
+    Fn::Not:
+      - Fn::Equals:
+          - ''
+          - !Ref SecondaryPipelineBucket
 Resources:
   CrossAccountCodePipelineRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: CrossAccountCodePipeline
+      RoleName: CrossAccount-CodePipeline
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
+            Action: 'sts:AssumeRole'
             Principal:
               AWS: !Ref BuildAccount
+          - Effect: Allow
             Action: 'sts:AssumeRole'
+            Principal:
+              Service: codepipeline.amazonaws.com
       ManagedPolicyArns:
         - !Ref CrossAccountCodePipelinePolicy
   CrossAccountCodePipelinePolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
-      ManagedPolicyName: CrossAccountCodePipeline
+      ManagedPolicyName: CrossAccount-CodePipeline
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Action:
-              - 'codebuild:*' # this is only needed if you are including a CodeBuild step in your pipeline
-              - 'cloudformation:*' # we may be able to tune this down a little, but not much
-              - 's3:*' # this shouldn't need * access to S3, and certainly not to all buckets
-              - 'iam:PassRole' # I believe this only needs to be able to pass role to the CrossAccountCloudFormation role
-              - 'lambda:invoke*' # this should only allow invoking lambda's that are being called in the pipeline - we will need a naming convention
+              - 'codepipeline:*'
+              - 'iam:ListRoles'
+              - 'cloudformation:Describe*'
+              - 'cloudFormation:List*'
+              - 'codebuild:BatchGetBuilds'
+              - 'codebuild:StartBuild'
+              - 'cloudformation:CreateStack'
+              - 'cloudformation:DeleteStack'
+              - 'cloudformation:DescribeStacks'
+              - 'cloudformation:UpdateStack'
+              - 'cloudformation:CreateChangeSet'
+              - 'cloudformation:DeleteChangeSet'
+              - 'cloudformation:DescribeChangeSet'
+              - 'cloudformation:ExecuteChangeSet'
+              - 'cloudformation:SetStackPolicy'
+              - 'cloudformation:ValidateTemplate'
+              - 's3:ListAllMyBuckets'
+              - 's3:GetBucketLocation'
             Resource: '*'
           - Effect: Allow
-            Action: 'kms:*'
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey*'
             Resource:
-              - !Sub arn:aws:kms:*:${BuildAccount}:key/* # would like this to be more limited, but the other side can
+              - !Ref BuildAccountKMSKeyArn
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Ref SecondaryCrossAccountCMK
+                  - !Ref AWS::NoValue
+          - Action:
+              - 's3:GetBucketPolicy'
+              - 's3:ListBucket'
+              - 's3:GetObject'
+              - 's3:PutObject'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${PipelineBucket}'
+              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}
+                  - !Ref AWS::NoValue
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Sub 'arn:aws:s3:::${SecondaryPipelineBucket}/*'
+                  - !Ref AWS::NoValue
+          - Action:
+              - 'sts:AssumeRole'
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CodePipeline
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation
 
   CrossAccountCloudFormationRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: CrossAccountCloudFormation
+      RoleName: CrossAccount-CloudFormation
       AssumeRolePolicyDocument:
         Statement:
           - Action: 'sts:AssumeRole'
@@ -50,12 +119,12 @@ Resources:
               Service: cloudformation.amazonaws.com
       ManagedPolicyArns:
         - !Ref CrossAccountCloudFormationPolicy
-        - 'arn:aws:iam::aws:policy/AdministratorAccess' # this isn't the policy we want here - we really need to clean up the CrossAccountCloudFormationPolicy and make it do what we need it to do
+        - 'arn:aws:iam::aws:policy/AdministratorAccess' # this isn't the policy we want here - we really need to clean up the CrossAccount-CloudFormationPolicy and make it do what we need it to do
   CrossAccountCloudFormationPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       #Description: Policy for Cross Account CloudFormation
-      ManagedPolicyName: CrossAccountCloudFormation
+      ManagedPolicyName: CrossAccount-CloudFormation
       PolicyDocument:
         Version: '2012-10-17'
         Statement:

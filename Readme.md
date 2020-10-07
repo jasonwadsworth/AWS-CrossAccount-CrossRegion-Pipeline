@@ -18,40 +18,32 @@ Let's get to it
 
 In order to create the cross account pipeline you must follow the steps below *in order*.
 
-Create a stack using `CrossAccountPrimary.yaml`. This should be run in the build account. This is the account where builds will run and the pipeline will live. This should be deployed in the region in which you want to perform builds and manage the pipeline. It does not need to be the same region as any of your deployments. There is only one parameter that need to be set the first time you run the stack:
+Create a stack using `CrossAccountPrimary.yaml`. This should be run in the build account. This is the account where builds will run and the pipeline will live. This should be deployed in the region in which you want to perform builds and manage the pipeline. It does not need to be the same region as any of your deployments. There is only one parameter:
 
-- _RootAccountArns_ - set this value to a comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::${AccountId}:root). This should include the build account.
-The remaining values should be left with default or blank settings.
-
-Once the primary stack is completed you will need to create a stack using `CloudFormationDeployer.yaml` in each of the accounts to which you wish to deploy. This stack can be created in any region because it only creates IAM resources, which are global. Most often this should be created in the same region as you are deploying to. This template has two parameters:
-- _BuildAccount_ - set this value to the AWS Account ID of the build account (the account you created the primary stack in).
-- _CMKARNs_ - set this to the CMK output value from the primary stack from step one. Later you may need to update this value to include multiple CMK ARNs. If you need to do so you will separate them using commas.
-
-Once the deployer stacks have completed in development, staging, and production you'll need to update the primary stack in the build account. You need to change three values:
-
-- _DeployReady_ - set this value to true.
-- _PipelineBucketAccessRoleArns_ - set this value a comma separated list of the output ARNs from the deployer stacks you created in the previous step (arn:aws:iam::${AccountId}:role/CrossAccountCodePipeline,arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation).
-- _PipelineBucketStarArns_ - set this to the ARN of the pipeline S3 bucket (yes, the one from this stack) with /* at the end (arn:aws:s3:::pipeline-bucket/*)
-This will update the stack to create an S3 bucket policy with permissions for the roles created in previous steps to access the S3 bucket, as well as create a lambda for syncing artifacts.
+- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/)
 
 Cross Region
 ----------------------------
 
 If any of your deployments are in regions other than the build region you will need perform some additional steps. These steps will need to be run once per region you are deploying to.
 
-Create a stack using `CrossAccountRegional.yaml` in the build account, in the region you are deploying to. There are only two parameters for this stack:
-- _RootAccountArns_ - set this value to a comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::${AccountId}:root). This should include the build account.
-- _PipelineBucketAccessRoleArns_ - set this value a comma separated list of the output ARNs from the deployer stacks you created in the previous step (arn:aws:iam::${AccountId}:role/CrossAccountCodePipeline,arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation).
+Create a stack using `CrossAccountRegional.yaml` in the build account, in the region you are deploying to. There is only one parameter:
 
-Once the stack(s) has/have completed you'll need to update the deployer stacks in each account. You will need to change one value:
+- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/)
 
-- _CMKARNs_ - this value should be a comma separated list of all the CMK ARNs created in the build account (one from the primary stack and one for each regional stack).
 
-You will also need to update the primary stack, adding the new ARNs to the following values:
-- _PipelineBucketAccessRoleArns_ - set this value a comma separated list of the output ARNs from the deployer stacks you created in the previous step (arn:aws:iam::${AccountId}:role/CrossAccountCodePipeline,arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation).
-- _PipelineBucketStarArns_ - set this to the ARN of the pipeline S3 bucket (yes, the one from this stack) with /* at the end (arn:aws:s3:::pipeline-bucket/*)
+Once the primary stack, and any regional stacks, are completed you will need to create a stack using `CrossAccountDeploy.yaml` in each of the accounts to which you wish to deploy (StackSets are a great way to do this, as all the values are the same). This stack can be created in any region because it only creates IAM resources, which are global. Most often this should be created in the same region as you are deploying to. These are the paramters:
 
-That is all that is needed to create a pipeline that is cross account/cross region. For an example pipeline that uses the values above please look at the `ExampleProjectPipeline.yaml`.
+- _BuildAccount_ - set this value to the AWS Account ID of the build account
+- _BuildAccountKMSKeyArn_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountPrimary` stack.
+- _PipelineBucket_ - set this value to the `PipelineBucket` export value from the `CrossAccountPrimary` stack
+- _SecondaryPipelineBucket_ - (optional) if you have a secondary region you are deploying to set this to the `CrossAccountCMK` export value from the `CrossAccountRegional` stack for your secondary region.
+- _SecondaryCrossAccountCMK_ - (optional) if you have a secondary region you are deploying to set this to the `PipelineBucket` export value from the `CrossAccountRegional` stack for your secondary region.
+
+> NOTE: currently the `CrossAccountDeploy.yaml` only supports a two region deployment. We hope to expand upon that soon.
+
+
+That is all that is needed to create a pipeline that is cross account/cross region. For an example pipeline that uses the values above please look at the `ExampleProjectPipelineSimple.yaml`.
 
 Developer Account
 -----------------
@@ -77,4 +69,4 @@ Note On GitHub
 ----------------
 The ExampleProject project uses a GitHub hook for CodeBuild. This hook uses an OAuth connection to AWS, so no GitHub credentials are stored in AWS. In order to configure this you'll need to go to the CodeBuild page and start the process of creating a build project. Follow the directions in [this article](https://www.itonaut.com/2018/06/18/use-github-source-in-aws-codebuild-project-using-aws-cloudformation/) for direction of what you need to do (just the last part of the article).
 
-**_NOTE_**: Some of the permission grants in this code are beyond what you should grant. For example, in order to simplify the build/deploy the grants in the `CrossAccountDeploy.yaml` are very open (`CrossAccountCloudFormationRole` is granted `arn:aws:iam::aws:policy/AdministratorAccess`). You should tighten these permissions to match the permissions you wish to have on your deployment process.
+**_NOTE_**: Some of the permission grants in this code are beyond what you should grant. For example, in order to simplify the build/deploy the grants in the `CrossAccountDeploy.yaml` are very open (`CrossAccount-CloudFormationRole` is granted `arn:aws:iam::aws:policy/AdministratorAccess`). You should tighten these permissions to match the permissions you wish to have on your deployment process.

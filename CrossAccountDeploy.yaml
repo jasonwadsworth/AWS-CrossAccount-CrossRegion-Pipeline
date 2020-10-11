@@ -123,19 +123,6 @@ Resources:
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-*
 
-  CrossAccountCodeBuildRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      RoleName: CrossAccount-CodeBuild
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: sts:AssumeRole
-            Effect: Allow
-            Principal:
-              Service: codebuild.amazonaws.com
-      ManagedPolicyArns:
-        - !Ref CrossAccountBasePolicy
-
   CrossAccountCloudFormationRole:
     Type: 'AWS::IAM::Role'
     Properties:

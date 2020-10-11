@@ -31,20 +31,7 @@ Resources:
             Resource: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CodePipeline
-              ForAnyValue:StringLike:
-                aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
-          - Effect: Allow
-            Principal: '*'
-            Action:
-              - 'kms:Decrypt'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
-            Resource: '*'
-            Condition:
-              ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CloudFormation
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath

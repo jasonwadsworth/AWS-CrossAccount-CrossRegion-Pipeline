@@ -23,6 +23,47 @@ Conditions:
           - ''
           - !Ref SecondaryPipelineBucket
 Resources:
+  CrossAccountBasePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: Policy for Cross Account CloudFormation
+      ManagedPolicyName: CrossAccount-Base
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - s3:GetBucketAcl
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - s3:GetObjectVersion
+              - s3:ListBucket
+              - s3:PutObject
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}
+                  - !Ref AWS::NoValue
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}/*
+                  - !Ref AWS::NoValue
+          - Action: cloudformation:*
+            Effect: Allow
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Resource:
+              - !Ref BuildAccountKMSKeyArn
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Ref SecondaryCrossAccountCMK
+                  - !Ref AWS::NoValue
+
   CrossAccountCodePipelineRole:
     Type: 'AWS::IAM::Role'
     Properties:
@@ -39,6 +80,7 @@ Resources:
             Principal:
               Service: codepipeline.amazonaws.com
       ManagedPolicyArns:
+        - !Ref CrossAccountBasePolicy
         - !Ref CrossAccountCodePipelinePolicy
 
   CrossAccountCodePipelinePolicy:
@@ -69,33 +111,6 @@ Resources:
               - 's3:ListAllMyBuckets'
               - 's3:GetBucketLocation'
             Resource: '*'
-          - Effect: Allow
-            Action:
-              - 'kms:Decrypt'
-              - 'kms:GenerateDataKey*'
-            Resource:
-              - !Ref BuildAccountKMSKeyArn
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Ref SecondaryCrossAccountCMK
-                  - !Ref AWS::NoValue
-          - Action:
-              - 's3:GetBucketPolicy'
-              - 's3:ListBucket'
-              - 's3:GetObject'
-              - 's3:PutObject'
-            Effect: Allow
-            Resource:
-              - !Sub 'arn:aws:s3:::${PipelineBucket}'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}
-                  - !Ref AWS::NoValue
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Sub 'arn:aws:s3:::${SecondaryPipelineBucket}/*'
-                  - !Ref AWS::NoValue
           - Action:
               - 'sts:AssumeRole'
             Effect: Allow
@@ -106,7 +121,20 @@ Resources:
               - iam:PassRole
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-*
+
+  CrossAccountCodeBuildRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: CrossAccount-CodeBuild
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+      ManagedPolicyArns:
+        - !Ref CrossAccountBasePolicy
 
   CrossAccountCloudFormationRole:
     Type: 'AWS::IAM::Role'
@@ -119,53 +147,14 @@ Resources:
             Principal:
               Service: cloudformation.amazonaws.com
       ManagedPolicyArns:
+        - !Ref CrossAccountBasePolicy
         - !Ref CrossAccountCloudFormationPolicy
-        - !Ref CrossAccountDeployPolicy
 
   CrossAccountCloudFormationPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
-      Description: Policy for Cross Account CloudFormation
-      ManagedPolicyName: CrossAccount-CloudFormation
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action:
-              - s3:GetBucketAcl
-              - s3:GetBucketLocation
-              - s3:GetObject
-              - s3:GetObjectVersion
-            Effect: Allow
-            Resource:
-              - !Sub arn:aws:s3:::${PipelineBucket}
-              - !Sub arn:aws:s3:::${PipelineBucket}/*
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}
-                  - !Ref AWS::NoValue
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}/*
-                  - !Ref AWS::NoValue
-          - Action: 'cloudformation:*'
-            Effect: Allow
-            Resource: '*'
-          - Effect: Allow
-            Action:
-              - 'kms:Decrypt'
-              - 'kms:GenerateDataKey*'
-            Resource:
-              - !Ref BuildAccountKMSKeyArn
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Ref SecondaryCrossAccountCMK
-                  - !Ref AWS::NoValue
-
-  CrossAccountDeployPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
-    Properties:
       Description: Policy for CloudFormation to deploy resources - Change this policy to meet your needs
-      ManagedPolicyName: CrossAccount-Deploy
+      ManagedPolicyName: CrossAccount-CloudFormation
       PolicyDocument:
         Version: '2012-10-17'
         Statement:

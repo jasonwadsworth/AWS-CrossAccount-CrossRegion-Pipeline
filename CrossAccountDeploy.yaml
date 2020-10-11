@@ -40,6 +40,7 @@ Resources:
               Service: codepipeline.amazonaws.com
       ManagedPolicyArns:
         - !Ref CrossAccountCodePipelinePolicy
+
   CrossAccountCodePipelinePolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
@@ -119,110 +120,300 @@ Resources:
               Service: cloudformation.amazonaws.com
       ManagedPolicyArns:
         - !Ref CrossAccountCloudFormationPolicy
-        - 'arn:aws:iam::aws:policy/AdministratorAccess' # this isn't the policy we want here - we really need to clean up the CrossAccount-CloudFormationPolicy and make it do what we need it to do
+        - !Ref CrossAccountDeployPolicy
+
   CrossAccountCloudFormationPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
-      #Description: Policy for Cross Account CloudFormation
+      Description: Policy for Cross Account CloudFormation
       ManagedPolicyName: CrossAccount-CloudFormation
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Action:
-              - 'dynamodb:CreateTable'
-              - 'dynamodb:DeleteTable'
-              - 'dynamodb:DescribeTable'
-              - 'dynamodb:UpdateTable'
+              - s3:GetBucketAcl
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - s3:GetObjectVersion
             Effect: Allow
             Resource:
-              - '*'
-          - Action:
-              - 'route53:ChangeResourceRecordSets'
-              - 'route53:ListResourceRecordSets'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'route53:GetChange'
-              - 'route53:GetHostedZone'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'lambda:AddPermission'
-              - 'lambda:CreateFunction'
-              - 'lambda:DeleteFunction'
-              - 'lambda:GetFunction'
-              - 'lambda:GetFunctionConfiguration'
-              - 'lambda:ListTags'
-              - 'lambda:RemovePermission'
-              - 'lambda:TagResource'
-              - 'lambda:UntagResource'
-              - 'lambda:UpdateFunction'
-              - 'lambda:UpdateFunctionCode'
-              - 'lambda:UpdateFunctionConfiguration'
-            Effect: Allow
-            Resource:
-              - '*'
-          - Action:
-              - 'logs:CreateLogGroup'
-              - 'logs:DeleteLogGroup'
-              - 'logs:DeleteMetricFilter'
-              - 'logs:DeleteRetentionPolicy'
-              - 'logs:DeleteSubscriptionFilter'
-              - 'logs:DescribeLogGroups'
-              - 'logs:DescribeMetricFilters'
-              - 'logs:DescribeSubscriptionFilters'
-              - 'logs:FilterLogEvents'
-              - 'logs:ListTagsLogGroup'
-              - 'logs:PutMetricFilter'
-              - 'logs:PutRetentionPolicy'
-              - 'logs:PutSubscriptionFilter'
-              - 'logs:TagLogGroup'
-              - 'logs:UntagLogGroup'
-            Effect: Allow
-            Resource:
-              - '*'
-          - Action:
-              - 'events:DeleteRule'
-              - 'events:DescribeRule'
-              - 'events:DisableRule'
-              - 'events:EnableRule'
-              - 'events:PutRule'
-              - 'events:RemoveTargets'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'cloudwatch:*Alarms*'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'iam:AttachRolePolicy'
-              - 'iam:CreateRole'
-              - 'iam:CreateServiceLinkedRole'
-              - 'iam:DeleteRole'
-              - 'iam:DeleteServiceLinkedRole'
-              - 'iam:DetachRolePolicy'
-              - 'iam:GetRole'
-              - 'iam:ListAttachedRolePolicies'
-              - 'iam:ListPolicyVersions'
-              - 'iam:ListRoleTags'
-              - 'iam:TagRole'
-              - 'iam:UntagRole'
-              - 'iam:UpdateRole'
-              - 'iam:UpdateRoleDescription'
-            Effect: Allow
-            Resource:
-              - '*'
-          - Action:
-              - 'iam:CreatePolicy'
-              - 'iam:DeletePolicy'
-              - 'iam:GetPolicy'
-              - 'iam:ListEntitiesForPolicy'
-            Effect: Allow
-            Resource:
-              - '*'
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}
+                  - !Ref AWS::NoValue
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}/*
+                  - !Ref AWS::NoValue
           - Action: 'cloudformation:*'
             Effect: Allow
             Resource: '*'
+          - Effect: Allow
+            Action:
+              - 'kms:Decrypt'
+              - 'kms:GenerateDataKey*'
+            Resource:
+              - !Ref BuildAccountKMSKeyArn
+              - Fn::If:
+                  - HasSecondaryRegion
+                  - !Ref SecondaryCrossAccountCMK
+                  - !Ref AWS::NoValue
+
+  CrossAccountDeployPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      Description: Policy for CloudFormation to deploy resources - Change this policy to meet your needs
+      ManagedPolicyName: CrossAccount-Deploy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - amplify:CreateApp
+              - amplify:CreateBranch
+              - amplify:CreateDeployment
+              - amplify:CreateDomainAssociation
+              - amplify:CreateWebHook
+              - amplify:DeleteApp
+              - amplify:DeleteBranch
+              - amplify:DeleteDomainAssociation
+              - amplify:DeleteWebHook
+              - amplify:GetApp
+              - amplify:GetBranch
+              - amplify:GetDomainAssociation
+              - amplify:GetWebHook
+              - amplify:StartDeployment
+              - amplify:TagResource
+              - amplify:UpdateApp
+              - amplify:UpdateWebHook
+              - amplify:UntagResource
+              - amplify:UpdateBranch
+              - amplify:UpdateDomainAssociation
+
+              - acm:AddTagsToCertificate
+              - acm:DeleteCertificate
+              - acm:DescribeCertificate
+              - acm:GetCertificate
+              - acm:List*
+              - acm:RemoveTagsFromCertificate
+              - acm:RenewCertificate
+              - acm:RequestCertificate
+              - acm:UpdateCertificateOptions
+
+              - apigateway:*
+
+              - cloudfront:CreateDistribution
+              - cloudfront:CreateInvalidation
+              - cloudfront:DeleteDistribution
+              - cloudfront:GetDistribution
+              - cloudfront:ListDistributions
+              - cloudfront:UpdateDistribution
+
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:DeleteDashboards
+              - cloudwatch:Describe*
+              - cloudwatch:EnableAlarmActions
+              - cloudwatch:GetDashboard
+              - cloudwatch:List*
+              - cloudwatch:PutDashboard
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:TagResource
+              - cloudwatch:UntagResource
+
+              - codebuild:*
+
+              - cognito-idp:UpdateUserPool
+
+              - dynamodb:CreateGlobalTable
+              - dynamodb:CreateTable*
+              - dynamodb:DeleteTable*
+              - dynamodb:Describe*
+              - dynamodb:List*
+              - dynamodb:TagResource
+              - dynamodb:UntagResource
+              - dynamodb:UpdateContinuousBackups
+              - dynamodb:UpdateGlobalTable*
+              - dynamodb:UpdateTable*
+              - dynamodb:UpdateTimeToLive
+
+              - es:Add*
+              - es:Create*
+              - es:Describe*
+              - es:Delete*
+              - es:Get*
+              - es:List*
+              - es:RemoveTags
+              - es:UpdateElasticsearchDomainConfig
+              - es:UpgradeElasticsearchDomain
+              - es:ESHttp*
+
+              - events:DeleteRule
+              - events:DescribeRule
+              - events:DisableRule
+              - events:EnableRule
+              - events:PutRule
+              - events:PutTargets
+              - events:RemoveTargets
+
+              - firehose:CreateDeliveryStream
+              - firehose:DeleteDeliveryStream
+              - firehose:DescribeDeliveryStream
+              - firehose:List*
+              - firehose:StartDeliveryStreamEncryption
+              - firehose:StopDeliveryStreamEncryption
+              - firehose:TagDeliveryStream
+              - firehose:UntagDeliveryStream
+              - firehose:UpdateDestination
+
+              - kinesis:PutRecords # is this right? doesn't seem like the deployment should be doing this
+
+              - lambda:AddLayerVersionPermission
+              - lambda:AddPermission
+              - lambda:CreateAlias
+              - lambda:CreateEventSourceMapping
+              - lambda:CreateFunction
+              - lambda:DeleteAlias
+              - lambda:DeleteEventSourceMapping
+              - lambda:DeleteFunction*
+              - lambda:DeleteLayerVersion
+              - lambda:DeleteProvisionedConcurrencyConfig
+              - lambda:GetAccountSettings
+              - lambda:GetAlias
+              - lambda:GetEventSourceMapping
+              - lambda:GetFunction*
+              - lambda:GetLayerVersion*
+              - lambda:GetPolicy
+              - lambda:GetProvisionedConcurrencyConfig
+              - lambda:List*
+              - lambda:PublishLayerVersion
+              - lambda:PublishVersion
+              - lambda:PutFunctionConcurrency
+              - lambda:PutFunctionEventInvokeConfig
+              - lambda:PutProvisionedConcurrencyConfig
+              - lambda:RemoveLayerVersionPermission
+              - lambda:RemovePermission
+              - lambda:TagResource
+              - lambda:UntagResource
+              - lambda:UpdateAlias
+              - lambda:UpdateEventSourceMapping
+              - lambda:UpdateFunction*
+
+              - logs:*
+
+              - route53:ChangeResourceRecordSets
+              - route53:GetChange
+              - route53:GetHostedZone
+              - route53:ListHostedZones
+              - route53:ListResourceRecordSets
+
+              - s3:CreateAccessPoint
+              - s3:CreateBucket
+              - s3:DeleteAccessPoint*
+              - s3:DeleteBucket*
+              - s3:GetAccessPoint*
+              - s3:GetAccountPublicAccessBlock
+              - s3:Get*Configuration
+              - s3:GetBucket*
+              - s3:List*
+              - s3:ObjectOwnerOverrideToBucketOwner
+              - s3:PutAccessPointPolicy
+              - s3:PutAccountPublicAccessBlock
+              - s3:Put*Configuration
+              - s3:PutBucket*
+
+              - secretsmanager:CreateSecret
+              - secretsmanager:DeleteResourcePolicy
+              - secretsmanager:DeleteSecret
+              - secretsmanager:Describe*
+              - secretsmanager:GetResourcePolicy
+              - secretsmanager:List*
+              - secretsmanager:PutResourcePolicy
+              - secretsmanager:PutSecretValue
+              - secretsmanager:TagResource
+              - secretsmanager:UntagResource
+              - secretsmanager:UpdateSecret
+
+              - sns:AddPermission
+              - sns:ConfirmSubscription # not sure if this is needed for auto confirmed subscriptions
+              - sns:CreateTopic
+              - sns:DeleteTopic
+              - sns:GetSubscriptionAttributes
+              - sns:GetTopicAttributes
+              - sns:List*
+              - sns:RemovePermission
+              - sns:SetSubscriptionAttributes
+              - sns:SetTopicAttributes
+              - sns:Subscribe
+              - sns:TagResource
+              - sns:Unsubscribe
+              - sns:UntagResource
+
+              - sqs:AddPermission
+              - sqs:CreateQueue
+              - sqs:DeleteQueue
+              - sqs:GetQueueAttributes
+              - sqs:GetQueueUrl
+              - sqs:List*
+              - sqs:RemovePermission
+              - sqs:SetQueueAttributes
+              - sqs:TagQueue
+              - sqs:UntagQueue
+
+              - ssm:AddTagsToResource
+              - ssm:DeleteParameter
+              - ssm:Describe*
+              - ssm:GetParameter
+              - ssm:GetParameterHistory
+              - ssm:LabelParameterVersion
+              - ssm:List*
+              - ssm:PutParameter
+              - ssm:RemoveTagsFromResource
+
+            Effect: Allow
+            Resource:
+              - '*'
+
+          - Action:
+              - iam:AddRoleToInstanceProfile
+              - iam:AttachRolePolicy
+              - iam:CreateInstanceProfile
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:CreateRole
+              - iam:CreateServiceLinkedRole
+              - iam:DeleteInstanceProfile
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:DeleteRole
+              - iam:DeleteRolePolicy # inline roles - remove if not allowed
+              - iam:DeleteServiceLinkedRole
+              - iam:DetachRolePolicy
+              - iam:GetInstanceProfile
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:GetRolePolicy # inline roles - remove if not allowed
+              - iam:ListAttachedRolePolicies
+              - iam:ListEntitiesForPolicy
+              - iam:ListInstanceProfiles
+              - iam:ListInstanceProfilesForRole
+              - iam:ListPolicies
+              - iam:ListPolicyVersions
+              - iam:ListRolePolicies # inline roles - remove if not allowed
+              - iam:ListRoleTags
+              - iam:ListRoles
+              - iam:PassRole
+              - iam:PutRolePolicy # inline roles - remove if not allowed
+              - iam:RemoveRoleFromInstanceProfile
+              - iam:SetDefaultPolicyVersion
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+            Effect: Allow
+            Resource:
+              - '*' # use a path to allow this to be more specific
 Outputs:
   CrossAccountCloudFormationRoleArn:
     Description: The ARN for the cloud formation role.

@@ -5,63 +5,51 @@ Parameters:
     Type: String
   ReplicationRegistrationTopicArn:
     Type: String
+  ReplicationRoleArn:
+    Type: String
 Resources:
   # The KMS key must allow the build account to have access to encrypt data for S3 build artifact syncing
   KMSKey:
-    Type: 'AWS::KMS::Key'
+    Type: AWS::KMS::Key
     Properties:
       Description: Used by Assumed Roles in deploy accounts to Encrypt/Decrypt code
       EnableKeyRotation: true
       KeyPolicy:
         Version: '2012-10-17'
-        Id: !Ref 'AWS::StackName'
+        Id: !Ref AWS::StackName
         Statement:
           - Sid: Allows admin of the key
             Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
             Action:
-              - 'kms:Create*'
-              - 'kms:Describe*'
-              - 'kms:Enable*'
-              - 'kms:List*'
-              - 'kms:Put*'
-              - 'kms:Update*'
-              - 'kms:Revoke*'
-              - 'kms:Disable*'
-              - 'kms:Get*'
-              - 'kms:Delete*'
-              - 'kms:ScheduleKeyDeletion'
-              - 'kms:CancelKeyDeletion'
-              - 'kms:Encrypt'
-              - 'kms:Decrypt'
-              - 'kms:ReEncrypt*'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
+              - kms:*
             Resource: '*'
           - Effect: Allow
             Principal:
-              AWS: !Sub arn:aws:iam::${BuildAccountId}:root # we can probably scope this down to the replication role in the build account
+              AWS: !Sub arn:aws:iam::${BuildAccountId}:root # we can probably scope this down to the replication role in the build account with a condition
             Action:
-              - 'kms:Encrypt'
-              - 'kms:Decrypt'
-              - 'kms:ReEncrypt*'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
             Resource: '*'
 
   KMSAlias:
-    Type: 'AWS::KMS::Alias'
+    Type: AWS::KMS::Alias
     Properties:
       AliasName: alias/codepipeline-crossaccounts
       TargetKeyId: !Ref KMSKey
+
   ManualInterventionTopic:
-    Type: 'AWS::SNS::Topic'
+    Type: AWS::SNS::Topic
     Properties:
       DisplayName: Topic for pipeline manual intervention notifications
       TopicName: PipelineManualIntervention
+
+  # this is the bucket that will be used for build artifacts, either from local builds or from builds originating in another account
   BuildBucket:
-    Type: 'AWS::S3::Bucket'
+    Type: AWS::S3::Bucket
     Properties:
       VersioningConfiguration:
         Status: Enabled
@@ -69,35 +57,92 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
-              SSEAlgorithm: 'aws:kms'
+              SSEAlgorithm: aws:kms
+
+  # This is the bucket that will be used for pipeline artifacts
   PipelineBucket:
-    Type: 'AWS::S3::Bucket'
+    Type: AWS::S3::Bucket
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
-              SSEAlgorithm: 'aws:kms'
+              SSEAlgorithm: aws:kms
 
   # Allow the build account to have access to the build bucket for replication of build artifacts
   BuildBucketPolicy:
-    Type: 'AWS::S3::BucketPolicy'
+    Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref BuildBucket
       PolicyDocument:
         Statement:
           - Action:
-              - 's3:*' # I don't think the replication needs full S3 control, so this can probably be scoped down
+              - s3:PutObject*
             Effect: Allow
             Resource:
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}'
+              - Fn::Sub:
+                  - arn:aws:s3:::${Bucket}
                   - Bucket: !Ref BuildBucket
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}/*'
+              - Fn::Sub:
+                  - arn:aws:s3:::${Bucket}/*
                   - Bucket: !Ref BuildBucket
             Principal:
-              AWS: !Sub arn:aws:iam::${BuildAccountId}:root # we can probably scope this down to the replication role in the build account
+              AWS: !Ref ReplicationRoleArn
+
+  # This role can be used as the pipeline source in any pipeline
+  PipelineSourceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CrossAccount-PipelineSource
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              AWS: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Ref PipelineSourcePolicy
+
+  # This policy grants the pipeline source permission to access the S3 buckets for build and pipelines
+  # as well as permission to use the KMS key, assume the CrossAccount-PipelineSource role and passrole to the CrossAccount-PipelineSource role
+  PipelineSourcePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: CrossAccount-PipelineSource
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - cloudformation:*
+            Effect: Allow
+            Resource: '*'
+          - Action:
+              - s3:GetBucketLocation
+              - s3:List*
+              - s3:Get*
+              - s3:Put*
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:s3:::${BuildBucket}
+              - !Sub arn:aws:s3:::${BuildBucket}/*
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
+          - Action:
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
+            Effect: Allow
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
 
   # This custom resource creates the notification on the build bucket so that we can trigger a
   # lambda whenever something is created in the build bucket. This is a custom resource because
@@ -107,8 +152,11 @@ Resources:
     Type: Custom::RegisterForReplication
     Properties:
       ServiceToken: !Ref ReplicationRegistrationTopicArn
-      S3Bucket: !ImportValue BuildBucket
-
+      BucketArn: !Ref BuildBucket #rename this to BucketName
+      AccountId: !Ref AWS::AccountId
+      Region: !Ref AWS::Region
+      RoleArn: !Sub arn:aws:iam::${BuildAccountId}:role/ReplicationRegistrationInvokeRole
+      FunctionArn: !Sub arn:aws:lambda:us-west-2:${BuildAccountId}:function:CrossAccountReplicationRegistration
 Outputs:
   CMK:
     Description: The CMK that is used for cross account access

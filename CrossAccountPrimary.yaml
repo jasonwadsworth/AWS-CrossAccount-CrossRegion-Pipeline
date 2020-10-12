@@ -23,7 +23,8 @@ Resources:
               - 'kms:*'
             Resource: '*'
           - Effect: Allow
-            Principal: '*'
+            Principal:
+              AWS: '*'
             Action:
               - 'kms:Encrypt'
               - 'kms:Decrypt'
@@ -181,6 +182,92 @@ Resources:
               - 'kms:GenerateDataKey*'
             Resource:
               - !GetAtt KMSKey.Arn
+
+          # if using GitHub in your pipeline you should store the token in a secret named 'github-access-token'
+          - Action:
+              - secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:github-access-token-*
+
+          - Action:
+              - cloudformation:*
+
+              - cloudwatch:DeleteAlarms
+              - cloudwatch:DeleteDashboards
+              - cloudwatch:Describe*
+              - cloudwatch:EnableAlarmActions
+              - cloudwatch:GetDashboard
+              - cloudwatch:List*
+              - cloudwatch:PutDashboard
+              - cloudwatch:PutMetricAlarm
+              - cloudwatch:TagResource
+              - cloudwatch:UntagResource
+
+              - codebuild:*
+
+              - codepipeline:CreatePipeline
+              - codepipeline:DeletePipeline
+              - codepipeline:GetPipeline
+              - codepipeline:ListPipelines
+              - codepipeline:StartPipelineExecution
+              - codepipeline:TagResource
+              - codepipeline:UntagResource
+              - codepipeline:UpdatePipeline
+
+              - events:DeleteRule
+              - events:DescribeRule
+              - events:DisableRule
+              - events:EnableRule
+              - events:PutRule
+              - events:PutTargets
+              - events:RemoveTargets
+
+              - logs:*
+            Effect: Allow
+            Resource:
+              - '*'
+
+          - Action:
+              - iam:AddRoleToInstanceProfile
+              - iam:AttachRolePolicy
+              - iam:CreateInstanceProfile
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:CreateRole
+              - iam:CreateServiceLinkedRole
+              - iam:DeleteInstanceProfile
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:DeleteRole
+              - iam:DeleteRolePolicy # inline roles - remove if not allowed
+              - iam:DeleteServiceLinkedRole
+              - iam:DetachRolePolicy
+              - iam:GetInstanceProfile
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:GetRolePolicy # inline roles - remove if not allowed
+              - iam:ListAttachedRolePolicies
+              - iam:ListEntitiesForPolicy
+              - iam:ListInstanceProfiles
+              - iam:ListInstanceProfilesForRole
+              - iam:ListPolicies
+              - iam:ListPolicyVersions
+              - iam:ListRolePolicies # inline roles - remove if not allowed
+              - iam:ListRoleTags
+              - iam:ListRoles
+              - iam:PassRole
+              - iam:PutRolePolicy # inline roles - remove if not allowed
+              - iam:RemoveRoleFromInstanceProfile
+              - iam:SetDefaultPolicyVersion
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+            Effect: Allow
+            Resource:
+              - '*' # use a path to allow this to be more specific
 
   CrossAccountDeployPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
@@ -649,20 +736,7 @@ Resources:
             Principal: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CloudFormation
-              ForAnyValue:StringLike:
-                aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
-          - Action:
-              - 's3:*'
-            Effect: Allow
-            Resource:
-              - !Sub 'arn:aws:s3:::${PipelineBucket}'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
-            Principal: '*'
-            Condition:
-              ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CodePipeline
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath

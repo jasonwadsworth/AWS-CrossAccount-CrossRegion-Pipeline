@@ -21,7 +21,8 @@ Resources:
               - 'kms:*'
             Resource: '*'
           - Effect: Allow
-            Principal: '*'
+            Principal:
+              AWS: '*'
             Action:
               - 'kms:Encrypt'
               - 'kms:Decrypt'
@@ -63,20 +64,7 @@ Resources:
             Principal: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CloudFormation
-              ForAnyValue:StringLike:
-                aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
-          - Action:
-              - 's3:*'
-            Effect: Allow
-            Resource:
-              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
-              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
-            Principal: '*'
-            Condition:
-              ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CodePipeline
+                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath

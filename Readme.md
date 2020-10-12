@@ -5,34 +5,33 @@ This repository is designed to help build out a cross account, cross region, pip
 
 ![alt text](CrossAccountPipeline.png "Cross Account Pipeline Diagram")
 
-There are some known issues with this repository:
-- There are permissions that are not nearly as tight as they should be. With time (and maybe some help) I hope to tighten these down to only grant what is absolutely necessary. Currently there is even a place where I have granted admin access, though that place already had permission to create IAM policies so it wasn't a big stretch.
-- At times the example pipeline fails when starting in a region other than the primary region. The error message indicates that the artifacts aren't available or permissions don't allow access, but, without fail, it works when you retry. I'm going to reach out to AWS on this.
+There are definitely some areas for improvement:
+- There are permissions that are not nearly as tight as they should be. With time (and maybe some help) I hope to tighten these down to only grant what is absolutely necessary.
+- The current version doesn't handle more than two regions. This is a limitation that can be remedied by simply adding to the `CrossAccountDeploy.yaml` file. Ideally it would use a transform so you don't have to add a new parameter for each region, but that might not be so easy.
+- There needs to be some documentation on how this uses organization. This version relies heavily on organizations for managing access to the artifact buckets and KMS key. This greatly simplifies things, but it needs to be documented.
 
-There are also some areas for improvement:
-- A lot of the places where you have to put in ARNs could be generated with the help of a custom transform. For example, instead of supplying a list of buckets as well as the ARNs with /* you could just supply the buckets and use a transform to build the ARNs.
-- Need to document the bootstrap and developer shell scripts.
-
-Let's get to it
-------------
+Getting started
+---------------
 
 In order to create the cross account pipeline you must follow the steps below *in order*.
 
-Create a stack using `CrossAccountPrimary.yaml`. This should be run in the build account. This is the account where builds will run and the pipeline will live. This should be deployed in the region in which you want to perform builds and manage the pipeline. It does not need to be the same region as any of your deployments. There is only one parameter:
+Create a stack using `CrossAccountPrimary.yaml`. This should be run in the build account. This is the account where builds will run and the pipeline will live. This should be deployed in the region in which you want to perform builds and manage the pipeline. It does not need to be the same region as any of your deployments (though currently it does need to be one of the two regions you support). There is only one parameter:
 
-- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/)
+- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/). This organization should contain all the accounts you want to deploy to.
 
 Cross Region
-----------------------------
+------------
 
-If any of your deployments are in regions other than the build region you will need perform some additional steps. These steps will need to be run once per region you are deploying to.
+If any of your deployments are in regions other than the build region you will need perform an additional step for each region (NOTE: currently only one additional region is supported). These steps will need to be run once per region you are deploying to.
 
 Create a stack using `CrossAccountRegional.yaml` in the build account, in the region you are deploying to. There is only one parameter:
 
-- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/)
+- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/). This organization should contain all the accounts you want to deploy to.
 
+Deployment Accounts
+-------------------
 
-Once the primary stack, and any regional stacks, are completed you will need to create a stack using `CrossAccountDeploy.yaml` in each of the accounts to which you wish to deploy (StackSets are a great way to do this, as all the values are the same). This stack can be created in any region because it only creates IAM resources, which are global. Most often this should be created in the same region as you are deploying to. These are the paramters:
+Once the primary stack, and any regional stacks, are completed you will need to create a stack using `CrossAccountDeploy.yaml` in each of the accounts to which you wish to deploy (StackSets are a great way to do this, as all the values are the same). This stack can be created in any region because it only creates IAM resources, which are global. `us-east-1` is recommended. These are the paramters:
 
 - _BuildAccount_ - set this value to the AWS Account ID of the build account
 - _BuildAccountKMSKeyArn_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountPrimary` stack.
@@ -47,6 +46,8 @@ That is all that is needed to create a pipeline that is cross account/cross regi
 
 Developer Account
 -----------------
+NOTE: this section is currently not accurate. We will be adding this support back in soon.
+
 If you are running in a developer account you'll want to take some steps to be sure things are always up to date in your account.
 
 First, go through the steps of creating a cross account pipeline, treating your developer account as both the build account and the deployment account (you'll only deploy to one account), but you'll want to make a few small changes.

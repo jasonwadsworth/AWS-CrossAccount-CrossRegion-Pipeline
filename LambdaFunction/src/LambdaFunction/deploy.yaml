@@ -28,6 +28,7 @@ Resources:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       ManagedPolicyName: !Sub 'ExampleProject-LambdaFunction-${AWS::Region}'
+      Path: /example-project/
       Description: Policy for ExampleProject Lambda Function
       PolicyDocument:
         Version: '2012-10-17'
@@ -51,6 +52,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: !Sub 'ExampleProject-LambdaFunction-${AWS::Region}'
+      Path: /example-project/
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

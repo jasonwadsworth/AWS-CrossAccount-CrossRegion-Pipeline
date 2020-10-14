@@ -34,7 +34,7 @@ Resources:
             Resource: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-*
+                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath
@@ -55,6 +55,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: CrossAccount-CodePipeline
+      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -73,6 +74,7 @@ Resources:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       ManagedPolicyName: CrossAccount-CodePipeline
+      Path: /cross-account-service-role/
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -146,6 +148,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: CrossAccount-CloudFormation
+      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
           - Action: 'sts:AssumeRole'
@@ -161,6 +164,7 @@ Resources:
     Properties:
       Description: Policy for Cross Account CloudFormation
       ManagedPolicyName: CrossAccount-CloudFormation
+      Path: /cross-account-service-role/
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -274,6 +278,7 @@ Resources:
     Properties:
       Description: Policy for CloudFormation to deploy resources - Change this policy to meet your needs
       ManagedPolicyName: CrossAccount-Deploy
+      Path: /cross-account-service-role/
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -528,6 +533,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: CrossAccount-PipelineSyncArtifacts
+      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -545,6 +551,7 @@ Resources:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       ManagedPolicyName: CrossAccount-PipelineSyncArtifacts
+      Path: /cross-account-service-role/
       Description: Policy for syncing artifact data for cross account pipelines
       PolicyDocument:
         Version: '2012-10-17'
@@ -736,7 +743,7 @@ Resources:
             Principal: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-*
+                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath
@@ -746,6 +753,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: CrossAccount-PipelineSource
+      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
           - Action: 'sts:AssumeRole'
@@ -761,6 +769,7 @@ Resources:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       ManagedPolicyName: CrossAccount-PipelineSource
+      Path: /cross-account-service-role/
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -789,7 +798,7 @@ Resources:
           - Action:
               - 'iam:PassRole'
             Effect: Allow
-            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
           - Action:
               - 'sts:AssumeRole'
             Effect: Allow

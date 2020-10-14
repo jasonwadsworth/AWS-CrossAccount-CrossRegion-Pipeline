@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Permissions for deploying the example project
+Resources:
+  ExampleProjectCloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: ExampleProject-DeployPermissions
+      Path: /cross-account-service-role/
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+      ManagedPolicyArns:
+        - !Sub arn:aws:iam::${AWS::AccountId}:policy/cross-account-service-role/CrossAccount-Base
+
+  ExampleProjectDeployPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - apigateway:*
+
+              - lambda:AddLayerVersionPermission
+              - lambda:AddPermission
+              - lambda:CreateAlias
+              - lambda:CreateEventSourceMapping
+              - lambda:CreateFunction
+              - lambda:DeleteAlias
+              - lambda:DeleteEventSourceMapping
+              - lambda:DeleteFunction*
+              - lambda:DeleteLayerVersion
+              - lambda:DeleteProvisionedConcurrencyConfig
+              - lambda:GetAccountSettings
+              - lambda:GetAlias
+              - lambda:GetEventSourceMapping
+              - lambda:GetFunction*
+              - lambda:GetLayerVersion*
+              - lambda:GetPolicy
+              - lambda:GetProvisionedConcurrencyConfig
+              - lambda:List*
+              - lambda:PublishLayerVersion
+              - lambda:PublishVersion
+              - lambda:PutFunctionConcurrency
+              - lambda:PutFunctionEventInvokeConfig
+              - lambda:PutProvisionedConcurrencyConfig
+              - lambda:RemoveLayerVersionPermission
+              - lambda:RemovePermission
+              - lambda:TagResource
+              - lambda:UntagResource
+              - lambda:UpdateAlias
+              - lambda:UpdateEventSourceMapping
+              - lambda:UpdateFunction*
+
+              - logs:*
+            Effect: Allow
+            Resource:
+              - '*'
+
+          - Action:
+              - iam:AttachRolePolicy
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:CreateRole
+              - iam:CreateServiceLinkedRole
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:DeleteRole
+              - iam:DeleteServiceLinkedRole
+              - iam:DetachRolePolicy
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:ListAttachedRolePolicies
+              - iam:ListPolicies
+              - iam:ListPolicyVersions
+              - iam:ListRoleTags
+              - iam:ListRoles
+              - iam:PassRole
+              - iam:SetDefaultPolicyVersion
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:/role/example-project/*
+              - !Sub arn:aws:iam::${AWS::AccountId}:/policy/example-project/*
+      PolicyName: ExampleProject-DeployPermissions
+      Roles:
+        - !Ref ExampleProjectCloudFormationRole

@@ -32,7 +32,7 @@ Resources:
             Resource: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-*
+                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath
@@ -64,7 +64,7 @@ Resources:
             Principal: '*'
             Condition:
               ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-*
+                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
                   - !Ref DeploymentOrgPath

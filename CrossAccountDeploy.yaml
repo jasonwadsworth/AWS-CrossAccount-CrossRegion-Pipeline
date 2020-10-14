@@ -71,22 +71,21 @@ Resources:
   CrossAccountCloudFormationPolicyBuilderRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CrossAccount-CloudFormation-PolicyBuilder
-      Description: Role for creating permissions in cross account deployments. This role allows you to create policies with the permissions you need for each service. The role should be given a permission boundary to limit escalation of permissions.
-      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
           - Action: sts:AssumeRole
             Effect: Allow
             Principal:
               Service: cloudformation.amazonaws.com
+      Description: Role for creating permissions in cross account deployments. This role allows you to create policies with the permissions you need for each service. The role should be given a permission boundary to limit escalation of permissions.
       ManagedPolicyArns:
         - !Ref CrossAccountBasePolicy
+      Path: /cross-account-service-role/
+      RoleName: CrossAccount-CloudFormation-PolicyBuilder
 
   CrossAccountCloudFormationPolicyBuilderPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: CrossAccount-CloudFormation-PolicyBuilder
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -122,17 +121,15 @@ Resources:
               - iam:UpdateRoleDescription
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/*/*
               - !Sub arn:aws:iam::${AWS::AccountId}:policy/cross-account-service-role/*
+      PolicyName: CrossAccount-CloudFormation-PolicyBuilder
       Roles:
         - !Ref CrossAccountCloudFormationPolicyBuilderRole
 
   CrossAccountCodePipelineRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CrossAccount-CodePipeline
-      Description: This role is used for the cross account code pipelines. This role should be used for the pipeline itself. It has permissions to work with the artifact buckets, perform CodePipeline tasks (add as needed), as well as assume role to other cross account service roles.
-      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -144,13 +141,15 @@ Resources:
             Action: sts:AssumeRole
             Principal:
               Service: codepipeline.amazonaws.com
+      Description: This role is used for the cross account code pipelines. This role should be used for the pipeline itself. It has permissions to work with the artifact buckets, perform CodePipeline tasks (add as needed), as well as assume role to other cross account service roles.
       ManagedPolicyArns:
         - !Ref CrossAccountBasePolicy
+      Path: /cross-account-service-role/
+      RoleName: CrossAccount-CodePipeline
 
   CrossAccountCodePipelinePolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: CrossAccount-CodePipeline
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -185,6 +184,7 @@ Resources:
             Effect: Allow
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
+      PolicyName: CrossAccount-CodePipeline
       Roles:
         - !Ref CrossAccountCodePipelineRole
 

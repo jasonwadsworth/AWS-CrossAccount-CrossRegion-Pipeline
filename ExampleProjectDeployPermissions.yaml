@@ -4,20 +4,25 @@ Resources:
   ExampleProjectCloudFormationRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: ExampleProject-DeployPermissions
-      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
           - Action: sts:AssumeRole
             Effect: Allow
             Principal:
               Service: cloudformation.amazonaws.com
+      Description: Policy for deploy permissions for the example project
       ManagedPolicyArns:
         - !Sub arn:aws:iam::${AWS::AccountId}:policy/cross-account-service-role/CrossAccount-Base
+        - !Ref ExampleProjectDeployPolicy
+      Path: /cross-account-service-role/
+      RoleName: ExampleProject-DeployPermissions
 
   ExampleProjectDeployPolicy:
-    Type: AWS::IAM::Policy
+    Type: AWS::IAM::ManagedPolicy
     Properties:
+      Description: Policy for deploy permissions for the example project
+      ManagedPolicyName: ExampleProject-DeployPermissions
+      Path: /cross-account-service-role/
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -89,6 +94,3 @@ Resources:
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:/role/example-project/*
               - !Sub arn:aws:iam::${AWS::AccountId}:/policy/example-project/*
-      PolicyName: ExampleProject-DeployPermissions
-      Roles:
-        - !Ref ExampleProjectCloudFormationRole

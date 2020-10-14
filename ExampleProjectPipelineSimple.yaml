@@ -326,7 +326,7 @@ Resources:
               InputArtifacts:
                 - Name: LambdaOutput
               Region: !Ref DevRegion
-              RunOrder: 1
+              RunOrder: 3
               RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: ExecuteLambdaChangeSet
               ActionTypeId:
@@ -341,5 +341,5 @@ Resources:
                 Capabilities: CAPABILITY_NAMED_IAM
                 RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
               Region: !Ref DevRegion
-              RunOrder: 2
+              RunOrder: 4
               RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline

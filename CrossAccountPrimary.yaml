@@ -129,20 +129,20 @@ Resources:
               - 'sts:AssumeRole'
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CodePipeline
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CloudFormation
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
           - Action:
               - 'sts:AssumeRole'
             Effect: Allow
             Resource:
-              - arn:aws:iam::*:role/CrossAccount-CodePipeline
-              - arn:aws:iam::*:role/CrossAccount-CloudFormation
+              - arn:aws:iam::*:role/cross-account-service-role/CrossAccount-CodePipeline
+              - arn:aws:iam::*:role/cross-account-service-role/CrossAccount-CloudFormation
           - Action:
               - iam:PassRole
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CloudFormation
 
   CrossAccountCloudFormationRole:
     Type: 'AWS::IAM::Role'
@@ -195,6 +195,7 @@ Resources:
               - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:github-access-token-*
 
           - Action:
+              # this really only needs to do things locally, so update pipelines, and run cloudformation for those pipelines
               - cloudformation:*
 
               - cloudwatch:DeleteAlarms

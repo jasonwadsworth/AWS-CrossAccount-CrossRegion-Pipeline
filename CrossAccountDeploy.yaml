@@ -90,6 +90,12 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Action:
+              - iam:Get*
+              - iam:List*
+            Effect: Allow
+            Resource:
+              - '*'
+          - Action:
               - iam:AttachRolePolicy
               - iam:CreateInstanceProfile
               - iam:CreatePolicy
@@ -99,21 +105,17 @@ Resources:
               - iam:DeletePolicy
               - iam:DeletePolicyVersion
               - iam:DeleteRole
-              - iam:DeleteRolePolicy # inline roles - remove if not allowed
               - iam:DeleteServiceLinkedRole
               - iam:DetachRolePolicy
               - iam:GetPolicy
               - iam:GetPolicyVersion
               - iam:GetRole
-              - iam:GetRolePolicy # inline roles - remove if not allowed
               - iam:ListAttachedRolePolicies
               - iam:ListEntitiesForPolicy
               - iam:ListPolicies
               - iam:ListPolicyVersions
-              - iam:ListRolePolicies # inline roles - remove if not allowed
               - iam:ListRoleTags
               - iam:ListRoles
-              - iam:PutRolePolicy # inline roles - remove if not allowed
               - iam:SetDefaultPolicyVersion
               - iam:TagRole
               - iam:UntagRole
@@ -121,7 +123,7 @@ Resources:
               - iam:UpdateRoleDescription
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/*/*
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
               - !Sub arn:aws:iam::${AWS::AccountId}:policy/cross-account-service-role/*
       PolicyName: CrossAccount-CloudFormation-PolicyBuilder
       Roles:

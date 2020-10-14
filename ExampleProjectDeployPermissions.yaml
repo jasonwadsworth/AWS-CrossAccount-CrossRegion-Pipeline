@@ -92,5 +92,5 @@ Resources:
               - iam:UpdateRoleDescription
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:/role/example-project/*
-              - !Sub arn:aws:iam::${AWS::AccountId}:/policy/example-project/*
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/example-project/*
+              - !Sub arn:aws:iam::${AWS::AccountId}:policy/example-project/*

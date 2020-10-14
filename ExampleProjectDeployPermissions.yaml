@@ -89,6 +89,13 @@ Resources:
               - '*'
 
           - Action:
+              - iam:Get*
+              - iam:List*
+            Effect: Allow
+            Resource:
+              - '*'
+
+          - Action:
               - iam:AttachRolePolicy
               - iam:CreatePolicy
               - iam:CreatePolicyVersion
@@ -99,14 +106,6 @@ Resources:
               - iam:DeleteRole
               - iam:DeleteServiceLinkedRole
               - iam:DetachRolePolicy
-              - iam:GetPolicy
-              - iam:GetPolicyVersion
-              - iam:GetRole
-              - iam:ListAttachedRolePolicies
-              - iam:ListPolicies
-              - iam:ListPolicyVersions
-              - iam:ListRoleTags
-              - iam:ListRoles
               - iam:PassRole
               - iam:SetDefaultPolicyVersion
               - iam:TagRole

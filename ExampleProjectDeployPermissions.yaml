@@ -27,8 +27,23 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Action:
-              - apigateway:*
+              - dynamodb:CreateGlobalTable
+              - dynamodb:CreateTable*
+              - dynamodb:DeleteTable*
+              - dynamodb:Describe*
+              - dynamodb:List*
+              - dynamodb:TagResource
+              - dynamodb:UntagResource
+              - dynamodb:UpdateContinuousBackups
+              - dynamodb:UpdateGlobalTable*
+              - dynamodb:UpdateTable*
+              - dynamodb:UpdateTimeToLive
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ExampleProject
+              - !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/ExampleProject/*
 
+          - Action:
               - lambda:AddLayerVersionPermission
               - lambda:AddPermission
               - lambda:CreateAlias
@@ -59,8 +74,16 @@ Resources:
               - lambda:UpdateAlias
               - lambda:UpdateEventSourceMapping
               - lambda:UpdateFunction*
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ExampleProject-LambdaFunction
+              - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ExampleProject-LambdaFunction:*
+              - !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:event-source-mapping:* # probably should put a conditional on this
 
-              - logs:*
+          - Action:
+              - apigateway:* # should limit this to just my API
+
+              - logs:* # should limit this to just my logs
             Effect: Allow
             Resource:
               - '*'

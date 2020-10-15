@@ -10,26 +10,35 @@ There are definitely some areas for improvement:
 - The current version doesn't handle more than two regions. This is a limitation that can be remedied by simply adding to the `CrossAccountDeploy.yaml` file. Ideally it would use a transform so you don't have to add a new parameter for each region, but that might not be so easy.
 - There needs to be some documentation on how this uses organization. This version relies heavily on organizations for managing access to the artifact buckets and KMS key. This greatly simplifies things, but it needs to be documented.
 
-Getting started
----------------
+---
+## Using the infrastructure
+
+Once everything is in place there are a few things you need to know to use the infrastructure.
+
+### Roles and Policies
+There are several roles and policies that are created for you to use, as well as some requirements for roles/policies you create.
+
+- Paths - all roles created by, and used in, this infrastructre have a path of `/cross-account-service-role/`. This path is important because it is used to grant permissions to things. When you create a deploy project one of the things you'll need to do is create a permissions template for deploying your service. The role created in this step must use this path.
+- CrossAccount-PipelineSource - this role is used as the source for a pipeline.
+
+---
+## Getting started
 
 In order to create the cross account pipeline you must follow the steps below *in order*.
 
 Create a stack using `CrossAccountPrimary.yaml`. This should be run in the build account. This is the account where builds will run and the pipeline will live. This should be deployed in the region in which you want to perform builds and manage the pipeline. It does not need to be the same region as any of your deployments (though currently it does need to be one of the two regions you support). There is only one parameter:
 
-- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/). This organization should contain all the accounts you want to deploy to.
+- _DeploymentOrgPath_ - set this value to the paths (comma separated) to your deployment organizations (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/). These organization should contain all the accounts you want to deploy to.
 
-Cross Region
-------------
+## Cross Region
 
 If any of your deployments are in regions other than the build region you will need perform an additional step for each region (NOTE: currently only one additional region is supported). These steps will need to be run once per region you are deploying to.
 
 Create a stack using `CrossAccountRegional.yaml` in the build account, in the region you are deploying to. There is only one parameter:
 
-- _DeploymentOrgPath_ - set this value to the path to your deployment organization (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/). This organization should contain all the accounts you want to deploy to.
+- _DeploymentOrgPath_ - set this value to the paths (comma separated) to your deployment organizations (e.g. o-abcdefghij/r-h123/ou-h123-3zyxwvut/). These organization should contain all the accounts you want to deploy to.
 
-Deployment Accounts
--------------------
+## Deployment Accounts
 
 Once the primary stack, and any regional stacks, are completed you will need to create a stack using `CrossAccountDeploy.yaml` in each of the accounts to which you wish to deploy (StackSets are a great way to do this, as all the values are the same). This stack can be created in any region because it only creates IAM resources, which are global. `us-east-1` is recommended. These are the paramters:
 
@@ -44,8 +53,9 @@ Once the primary stack, and any regional stacks, are completed you will need to 
 
 That is all that is needed to create a pipeline that is cross account/cross region. For an example pipeline that uses the values above please look at the `ExampleProjectPipelineSimple.yaml`.
 
-Developer Account
------------------
+---
+## Developer Account
+
 NOTE: this section is currently not accurate. We will be adding this support back in soon.
 
 If you are running in a developer account you'll want to take some steps to be sure things are always up to date in your account.

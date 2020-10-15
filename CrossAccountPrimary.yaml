@@ -2,6 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: Cross account primary stack.
 Parameters:
   DeploymentOrgPath:
+    Description: A comma separated list of OUs that can be deployed to. This OUs will have access to the pipeline artifacts.
     Type: String
 Resources:
   # This KMS key is for use with the cross account build/deploment. The permermissions allow the
@@ -37,7 +38,9 @@ Resources:
                 aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
+                  Fn::Split:
+                    - ','
+                    - !Ref DeploymentOrgPath
   KMSAlias:
     Type: 'AWS::KMS::Alias'
     Properties:
@@ -747,7 +750,9 @@ Resources:
                 aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
+                  Fn::Split:
+                    - ','
+                    - !Ref DeploymentOrgPath
 
   # This role can be used as the pipeline source in any pipeline
   PipelineSourceRole:

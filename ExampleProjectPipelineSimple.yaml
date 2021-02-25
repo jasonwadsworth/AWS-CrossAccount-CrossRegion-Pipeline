@@ -143,6 +143,7 @@ Resources:
     Properties:
       Name: ExampleProject
       RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline
+      RestartExecutionOnUpdate: true
       ArtifactStores:
         - ArtifactStore:
             Location: !ImportValue PipelineBucket

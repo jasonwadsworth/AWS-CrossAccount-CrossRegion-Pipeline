@@ -8,10 +8,6 @@ phases:
 
   pre_build:
     commands:
-      - lambda_file_name=Lambda.zip
-      # default this filename to avoid triggering the pipeline
-      - file_name=ExampleProject-NoDeploy.zip
-
       - dotnet restore ExampleProject.sln
   build:
     commands:
@@ -22,26 +18,16 @@ phases:
 
       - dotnet publish ./LambdaFunction/src/LambdaFunction/ --no-build -c Release -o ../../../publish/lambda
 
-      # the only times we want to deploy are when the build is triggered manually (both CODEBUILD_WEBHOOK_HEAD_REF and CODEBUILD_WEBHOOK_EVENT will be empty) or the build is triggered for master and the event is not a pull request event
-      - |
-        if [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "refs/heads/master" ] || [ "$CODEBUILD_WEBHOOK_HEAD_REF" = "" ] ; then
-          if [ "$CODEBUILD_WEBHOOK_EVENT" != "PULL_REQUEST_CREATED" ] && [ "$CODEBUILD_WEBHOOK_EVENT" != "PULL_REQUEST_UPDATED" ] && [ "$CODEBUILD_WEBHOOK_EVENT" != "PULL_REQUEST_REOPENED" ] ; then
-            file_name=ExampleProject.zip
-          fi
-        fi
-
-      - echo $file_name
-
 artifacts:
   type: zip
   files:
     - ExampleProject.yaml
     - ExampleProjectPipelineSimple.yaml
     - LambdaFunction-Unit-Tests.html
-  name: $file_name
+    - ExampleProjectPipelineSimple.yaml
+    - ExampleProjectDeployPermissions.yaml
   secondary-artifacts:
     LambdaFunction:
       base-directory: 'publish/lambda'
       files:
         - '**/*'
-      name: $lambda_file_name

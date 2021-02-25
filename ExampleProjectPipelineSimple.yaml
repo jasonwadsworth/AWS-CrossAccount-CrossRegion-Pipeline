@@ -21,62 +21,86 @@ Parameters:
   SecondaryCrossAccountCMK:
     Description: The secondary region's Cross Account CMK. This value is required if you are using a secondary region.
     Type: String
+  DeveloperAccount:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: true
 Conditions:
   HasSecondaryRegion:
     Fn::Not:
       - Fn::Equals:
           - ''
           - !Ref SecondaryRegion
+  IsDeveloperAccount:
+    Fn::Equals:
+      - true
+      - !Ref DeveloperAccount
 Resources:
-  CodeBuildRole:
-    Type: 'AWS::IAM::Role'
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      RoleName: ExampleProject-CodeBuild
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: 'sts:AssumeRole'
-            Effect: Allow
-            Principal:
-              Service: codebuild.amazonaws.com
-      ManagedPolicyArns:
-        - !Ref CodeBuildPolicy
-  CodeBuildPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
-    Properties:
-      Description: Policy for ExampleProject CodeBuild project
-      ManagedPolicyName: ExampleProject-CodeBuild
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action:
-              - 'logs:CreateLogGroup'
-              - 'logs:CreateLogStream'
-              - 'logs:PutLogEvents'
-            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ExampleProject*'
-            Effect: Allow
-          - Action:
-              - 's3:PutObject'
-              - 's3:GetObject'
-              - 's3:GetObjectVersion'
-            Resource:
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}'
-                  - Bucket: !ImportValue BuildBucket
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}/*'
-                  - Bucket: !ImportValue BuildBucket
-            Effect: Allow
+      LogGroupName: /aws/codebuild/ExampleProject-Test
+      RetentionInDays: 3
+
   CodeBuildProject:
     Type: 'AWS::CodeBuild::Project'
     Properties:
       Description: Continuous integration build for ExampleProject
-      Name: ExampleProject
+      Name: ExampleProject-Test
+      Artifacts:
+        Type: S3
+        Packaging: ZIP
+        Location: !ImportValue BuildBucket
+        Name: ExampleProject-Test.zip # it is important that this name is NOT the same as the other build because that one will kick off a deploy
+        OverrideArtifactName: false
+        Path: ExampleProject
+      SecondaryArtifacts:
+        - ArtifactIdentifier: LambdaFunction
+          Type: S3
+          Packaging: ZIP
+          Location: !ImportValue BuildBucket
+          Name: ExampleProject.LambdaFunction-Test.zip # it is important that this name is NOT the same as the other build because that one will be used in a deploy
+          OverrideArtifactName: false
+          Path: ExampleProject/LambdaFunction
+      ServiceRole: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodeBuild
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: 'aws/codebuild/dot-net:core-2.1'
+        PrivilegedMode: true
+        ComputeType: BUILD_GENERAL1_SMALL
+      Triggers:
+        Webhook:
+          Fn::If:
+            - IsDeveloperAccount
+            - false
+            - true
+      Source:
+        Auth:
+          Type: OAUTH
+        Type: GITHUB
+        BuildSpec: buildspec.yml
+        Location: !Ref GitHubUrl
+        ReportBuildStatus: true
+
+  CodeBuildDeployLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/codebuild/ExampleProject-Deploy
+      RetentionInDays: 3
+
+  CodeBuildDeployProject:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Description: Deploy build for ExampleProject
+      Name: ExampleProject-Deploy
       Artifacts:
         Type: S3
         Packaging: ZIP
         Location: !ImportValue BuildBucket
         Name: ExampleProject.zip
-        OverrideArtifactName: true
+        OverrideArtifactName: false
         Path: ExampleProject
       SecondaryArtifacts:
         - ArtifactIdentifier: LambdaFunction
@@ -84,25 +108,28 @@ Resources:
           Packaging: ZIP
           Location: !ImportValue BuildBucket
           Name: ExampleProject.LambdaFunction.zip
-          OverrideArtifactName: true
+          OverrideArtifactName: false
           Path: ExampleProject/LambdaFunction
-      ServiceRole: !Ref CodeBuildRole
+      ServiceRole: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodeBuild
       Environment:
         Type: LINUX_CONTAINER
         Image: 'aws/codebuild/dot-net:core-2.1'
         PrivilegedMode: true
         ComputeType: BUILD_GENERAL1_SMALL
-      # Triggers:
-      #   Webhook: true
-      #   FilterGroups:
-      #     - - Type: EVENT
-      #         Pattern: 'PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED'
-      #       - Type: BASE_REF
-      #         Pattern: ^refs/heads/master$
-      #     - - Type: EVENT
-      #         Pattern: PUSH
-      #       - Type: HEAD_REF
-      #         Pattern: ^refs/heads/master$
+      Triggers:
+        Webhook:
+          Fn::If:
+            - IsDeveloperAccount
+            - false
+            - true
+        FilterGroups:
+          Fn::If:
+            - IsDeveloperAccount
+            - !Ref AWS::NoValue
+            - - - Type: EVENT
+                  Pattern: PUSH
+                - Type: HEAD_REF
+                  Pattern: ^refs/heads/master$
       Source:
         Auth:
           Type: OAUTH
@@ -114,7 +141,8 @@ Resources:
     Type: 'AWS::CodePipeline::Pipeline'
     Properties:
       Name: ExampleProject
-      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CodePipeline
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline
+      RestartExecutionOnUpdate: true
       ArtifactStores:
         - ArtifactStore:
             Location: !ImportValue PipelineBucket
@@ -148,7 +176,7 @@ Resources:
                 PollForSourceChanges: 'true'
               OutputArtifacts:
                 - Name: PrimaryOutput
-              RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+              RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
               RunOrder: 1
             - Name: LambdaSource
               ActionTypeId:
@@ -158,11 +186,11 @@ Resources:
                 Version: '1'
               Configuration:
                 S3Bucket: !ImportValue BuildBucket
-                S3ObjectKey: ExampleProject/LambdaFunction/Lambda.zip
+                S3ObjectKey: ExampleProject/LambdaFunction/ExampleProject.LambdaFunction.zip
                 PollForSourceChanges: 'false'
               OutputArtifacts:
                 - Name: LambdaOutput
-              RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+              RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
               RunOrder: 1
         - Name: PreDeploy
           Actions:
@@ -187,14 +215,15 @@ Resources:
                     "ProdAccount": "${ProdAccount}",
                     "SecondaryRegion": "${SecondaryRegion}",
                     "SecondaryPipelineBucket": "${SecondaryPipelineBucket}",
-                    "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}"
+                    "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}",
+                    "DeveloperAccount": "${DeveloperAccount}"
                   }
-                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation'
+                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
               InputArtifacts:
                 - Name: PrimaryOutput
               Region: !Ref AWS::Region
               RunOrder: 1
-              RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CodePipeline'
+              RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline'
             - Name: ExecuteUpdatePipelineChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -206,10 +235,10 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject-Pipeline
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CloudFormation'
+                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
               Region: !Ref AWS::Region
               RunOrder: 2
-              RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/CrossAccount-CodePipeline'
+              RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline'
             - Fn::If:
                 - HasSecondaryRegion
                 - Name: SyncSecondaryArtifacts
@@ -225,10 +254,43 @@ Resources:
                     - Name: PrimaryOutput
                     - Name: LambdaOutput
                   RunOrder: 3
-                  RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+                  RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
                 - !Ref AWS::NoValue
         - Name: Deploy-Dev
           Actions:
+            - Name: Init-DeployPermissions
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ChangeSetName: DeployChangeSet
+                ActionMode: CHANGE_SET_REPLACE
+                StackName: ExampleProject-DeployPermissions
+                Capabilities: CAPABILITY_NAMED_IAM
+                TemplatePath: 'PrimaryOutput::ExampleProjectDeployPermissions.yaml'
+                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CloudFormation-PolicyBuilder
+              InputArtifacts:
+                - Name: PrimaryOutput
+              Region: !Ref DevRegion
+              RunOrder: 1
+              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
+            - Name: Exec-DeployPermissions
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: '1'
+              Configuration:
+                ChangeSetName: DeployChangeSet
+                ActionMode: CHANGE_SET_EXECUTE
+                StackName: ExampleProject-DeployPermissions
+                Capabilities: CAPABILITY_NAMED_IAM
+                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CloudFormation-PolicyBuilder
+              Region: !Ref DevRegion
+              RunOrder: 2
+              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: CreatePrimaryChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -241,12 +303,12 @@ Resources:
                 StackName: ExampleProject
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: 'PrimaryOutput::ExampleProject.yaml'
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CloudFormation
+                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
               InputArtifacts:
                 - Name: PrimaryOutput
               Region: !Ref DevRegion
-              RunOrder: 1
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CodePipeline
+              RunOrder: 3
+              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: ExecutePrimaryChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -258,10 +320,10 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CloudFormation
+                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
               Region: !Ref DevRegion
-              RunOrder: 2
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CodePipeline
+              RunOrder: 4
+              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: CreateLambdaChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -289,12 +351,12 @@ Resources:
                       ]
                     }
                   }
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CloudFormation
+                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
               InputArtifacts:
                 - Name: LambdaOutput
               Region: !Ref DevRegion
-              RunOrder: 1
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CodePipeline
+              RunOrder: 3
+              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: ExecuteLambdaChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -306,90 +368,7 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject-LambdaFunction
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CloudFormation
+                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
               Region: !Ref DevRegion
-              RunOrder: 2
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/CrossAccount-CodePipeline
-        - Name: Deploy-Prod
-          Actions:
-            - Name: CreatePrimaryChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: '1'
-              Configuration:
-                ChangeSetName: DeployChangeSet
-                ActionMode: CHANGE_SET_REPLACE
-                StackName: ExampleProject
-                Capabilities: CAPABILITY_NAMED_IAM
-                TemplatePath: 'PrimaryOutput::ExampleProject.yaml'
-                RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CloudFormation
-              InputArtifacts:
-                - Name: PrimaryOutput
-              Region: !Ref ProdRegion
-              RunOrder: 1
-              RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CodePipeline
-            - Name: ExecutePrimaryChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: '1'
-              Configuration:
-                ChangeSetName: DeployChangeSet
-                ActionMode: CHANGE_SET_EXECUTE
-                StackName: ExampleProject
-                Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CloudFormation
-              Region: !Ref ProdRegion
-              RunOrder: 2
-              RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CodePipeline
-            - Name: CreateLambdaChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: '1'
-              Configuration:
-                ChangeSetName: DeployChangeSet
-                ActionMode: CHANGE_SET_REPLACE
-                StackName: ExampleProject-LambdaFunction
-                Capabilities: CAPABILITY_NAMED_IAM
-                TemplatePath: 'LambdaOutput::deploy.yaml'
-                ParameterOverrides: |
-                  {
-                    "BucketName": {
-                      "Fn::GetArtifactAtt": [
-                        "LambdaOutput",
-                        "BucketName"
-                      ]
-                    },
-                    "ObjectKey": {
-                      "Fn::GetArtifactAtt": [
-                        "LambdaOutput",
-                        "ObjectKey"
-                      ]
-                    }
-                  }
-                RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CloudFormation
-              InputArtifacts:
-                - Name: LambdaOutput
-              Region: !Ref ProdRegion
-              RunOrder: 1
-              RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CodePipeline
-            - Name: ExecuteLambdaChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: '1'
-              Configuration:
-                ChangeSetName: DeployChangeSet
-                ActionMode: CHANGE_SET_EXECUTE
-                StackName: ExampleProject-LambdaFunction
-                Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CloudFormation
-              Region: !Ref ProdRegion
-              RunOrder: 2
-              RoleArn: !Sub arn:aws:iam::${ProdAccount}:role/CrossAccount-CodePipeline
+              RunOrder: 4
+              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline

@@ -1,17 +1,13 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Cross account regional stack.
 Parameters:
-  RootAccountArns:
-    Description: 'A comma separated list of ARNs representing the root accounts for deployment (arn:aws:iam::${AccountId}:root). This should include the build account.'
-    Type: String
-  PipelineBucketAccessRoleArns:
-    Description: "A comma separated list of ARNs representing the roles for that should have access to the artifact bucket. This typically includes the 'CrossAccountCodePipeline' (arn:aws:iam::${AccountId}:role/CrossAccountCodePipeline) and 'CrossAccountCloudFormation' (arn:aws:iam::${AccountId}:role/CrossAccountCloudFormation) roles."
+  DeploymentOrgPath:
     Type: String
 Resources:
   KMSKey:
     Type: 'AWS::KMS::Key'
     Properties:
-      Description: Used by Assumed Roles in Dev/Test/Prod accounts to Encrypt/Decrypt code
+      Description: Used by Assumed Roles in deploy accounts to Encrypt/Decrypt code
       EnableKeyRotation: true
       KeyPolicy:
         Version: '2012-10-17'
@@ -22,31 +18,11 @@ Resources:
             Principal:
               AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
             Action:
-              - 'kms:Create*'
-              - 'kms:Describe*'
-              - 'kms:Enable*'
-              - 'kms:List*'
-              - 'kms:Put*'
-              - 'kms:Update*'
-              - 'kms:Revoke*'
-              - 'kms:Disable*'
-              - 'kms:Get*'
-              - 'kms:Delete*'
-              - 'kms:ScheduleKeyDeletion'
-              - 'kms:CancelKeyDeletion'
-              - 'kms:Encrypt'
-              - 'kms:Decrypt'
-              - 'kms:ReEncrypt*'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
+              - 'kms:*'
             Resource: '*'
-          - Sid: Allow use of the key for CryptoGraphy Lambda
-            Effect: Allow
+          - Effect: Allow
             Principal:
-              AWS:
-                'Fn::Split':
-                  - ','
-                  - !Ref RootAccountArns
+              AWS: '*'
             Action:
               - 'kms:Encrypt'
               - 'kms:Decrypt'
@@ -54,6 +30,12 @@ Resources:
               - 'kms:GenerateDataKey*'
               - 'kms:DescribeKey'
             Resource: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
   KMSAlias:
     Type: 'AWS::KMS::Alias'
     Properties:
@@ -67,7 +49,7 @@ Resources:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
               SSEAlgorithm: 'aws:kms'
-  S3BucketPolicy:
+  ArtifactBucketPolicy:
     Type: 'AWS::S3::BucketPolicy'
     Properties:
       Bucket: !Ref ArtifactBucket
@@ -79,11 +61,57 @@ Resources:
             Resource:
               - !Sub 'arn:aws:s3:::${ArtifactBucket}'
               - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
-            Principal:
-              AWS:
-                'Fn::Split':
-                  - ','
-                  - !Ref PipelineBucketAccessRoleArns
+            Principal: '*'
+            Condition:
+              ArnLike:
+                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeploymentOrgPath
+
+  CrossAccountCodePipelinePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub CrossAccount-CodePipeline-${AWS::Region}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'kms:*'
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
+      Roles:
+        - CrossAccount-CodePipeline
+
+  SyncArtifactsPolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub CrossAccount-PipelineSyncArtifacts-${AWS::Region}
+      Description: Policy for syncing artifact data for cross account pipelines
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - 'kms:*'
+            Effect: Allow
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
+      Roles:
+        - CrossAccount-PipelineSyncArtifacts
+
 Outputs:
   CMK:
     Description: The CMK that is used for cross account access
@@ -93,3 +121,5 @@ Outputs:
   PipelineBucket:
     Description: The bucket for artifacts
     Value: !Ref ArtifactBucket
+    Export:
+      Name: PipelineBucket

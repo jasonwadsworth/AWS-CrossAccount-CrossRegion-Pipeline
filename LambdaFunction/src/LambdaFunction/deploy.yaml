@@ -28,6 +28,7 @@ Resources:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
       ManagedPolicyName: !Sub 'ExampleProject-LambdaFunction-${AWS::Region}'
+      Path: /example-project/
       Description: Policy for ExampleProject Lambda Function
       PolicyDocument:
         Version: '2012-10-17'
@@ -51,6 +52,7 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       RoleName: !Sub 'ExampleProject-LambdaFunction-${AWS::Region}'
+      Path: /example-project/
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -91,7 +93,7 @@ Resources:
         Type: AWS_PROXY
         PassthroughBehavior: WHEN_NO_MATCH
         IntegrationResponses:
-          - StatusCode: 200
+          - StatusCode: '200'
         Uri:
           'Fn::Sub':
             - 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations'

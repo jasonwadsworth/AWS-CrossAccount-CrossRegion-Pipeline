@@ -22,6 +22,7 @@ artifacts:
   type: zip
   files:
     - ExampleProject.yaml
+    - ExampleProjectPipelineSimple.yaml
     - LambdaFunction-Unit-Tests.html
     - ExampleProjectPipelineSimple.yaml
     - ExampleProjectDeployPermissions.yaml

@@ -137,7 +137,6 @@ Resources:
         BuildSpec: buildspec.yml
         Location: !Ref GitHubUrl
         ReportBuildStatus: true
-
   Pipeline:
     Type: 'AWS::CodePipeline::Pipeline'
     Properties:

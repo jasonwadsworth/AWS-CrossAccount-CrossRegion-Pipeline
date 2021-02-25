@@ -186,7 +186,7 @@ Resources:
                 Version: '1'
               Configuration:
                 S3Bucket: !ImportValue BuildBucket
-                S3ObjectKey: ExampleProject/LambdaFunction/Lambda.zip
+                S3ObjectKey: ExampleProject/LambdaFunction/ExampleProject.LambdaFunction.zip
                 PollForSourceChanges: 'false'
               OutputArtifacts:
                 - Name: LambdaOutput

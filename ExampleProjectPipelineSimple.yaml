@@ -75,16 +75,16 @@ Resources:
         Type: S3
         Packaging: ZIP
         Location: !ImportValue BuildBucket
-        Name: ExampleProject.zip
-        OverrideArtifactName: true
+        Name: ExampleProject-Test.zip # it is important that this name is NOT the same as the other build because that one will kick off a deploy
+        OverrideArtifactName: false
         Path: ExampleProject
       SecondaryArtifacts:
         - ArtifactIdentifier: LambdaFunction
           Type: S3
           Packaging: ZIP
           Location: !ImportValue BuildBucket
-          Name: ExampleProject.LambdaFunction.zip
-          OverrideArtifactName: true
+          Name: ExampleProject.LambdaFunction-Test.zip # it is important that this name is NOT the same as the other build because that one will be used in a deploy
+          OverrideArtifactName: false
           Path: ExampleProject/LambdaFunction
       ServiceRole: !Ref CodeBuildRole
       Environment:
@@ -92,17 +92,48 @@ Resources:
         Image: 'aws/codebuild/dot-net:core-2.1'
         PrivilegedMode: true
         ComputeType: BUILD_GENERAL1_SMALL
-      # Triggers:
-      #   Webhook: true
-      #   FilterGroups:
-      #     - - Type: EVENT
-      #         Pattern: 'PULL_REQUEST_CREATED,PULL_REQUEST_UPDATED,PULL_REQUEST_REOPENED'
-      #       - Type: BASE_REF
-      #         Pattern: ^refs/heads/master$
-      #     - - Type: EVENT
-      #         Pattern: PUSH
-      #       - Type: HEAD_REF
-      #         Pattern: ^refs/heads/master$
+      Triggers:
+        Webhook: true
+      Source:
+        Auth:
+          Type: OAUTH
+        Type: GITHUB
+        BuildSpec: buildspec.yml
+        Location: !Ref GitHubUrl
+        ReportBuildStatus: true
+  CodeBuildDeployProject:
+    Type: 'AWS::CodeBuild::Project'
+    Properties:
+      Description: Continuous integration build for ExampleProject
+      Name: ExampleProject
+      Artifacts:
+        Type: S3
+        Packaging: ZIP
+        Location: !ImportValue BuildBucket
+        Name: ExampleProject.zip
+        OverrideArtifactName: false
+        Path: ExampleProject
+      SecondaryArtifacts:
+        - ArtifactIdentifier: LambdaFunction
+          Type: S3
+          Packaging: ZIP
+          Location: !ImportValue BuildBucket
+          Name: ExampleProject.LambdaFunction.zip
+          OverrideArtifactName: false
+          Path: ExampleProject/LambdaFunction
+      ServiceRole: !Ref CodeBuildRole
+      Environment:
+        Type: LINUX_CONTAINER
+        Image: 'aws/codebuild/dot-net:core-2.1'
+        PrivilegedMode: true
+        ComputeType: BUILD_GENERAL1_SMALL
+      Triggers:
+        Webhook: true
+        FilterGroups:
+          - - Type: EVENT
+              Pattern: PUSH
+            - Type: HEAD_REF
+              Pattern: ^refs/heads/master$
       Source:
         Auth:
           Type: OAUTH

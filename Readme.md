@@ -5,6 +5,8 @@ This repository is designed to help build out a cross account, cross region, pip
 
 ![alt text](CrossAccountPipeline.png "Cross Account Pipeline Diagram")
 
+> Looking for the previous version of this project? You can find it [here](https://github.com/jasonwadsworth/AWS-CrossAccount-CrossRegion-Pipeline/releases/tag/1.0.0). That version is no longer being maintained, but feel free to make your own copy of it.
+
 There are definitely some areas for improvement:
 - The current version doesn't handle more than two regions. This is a limitation that can be remedied by simply adding to the `CrossAccountDeploy.yaml` file. Ideally it would use a transform so you don't have to add a new parameter for each region, but that might not be so easy.
 - There needs to be some documentation on how this uses organization. This version relies heavily on organizations for managing access to the artifact buckets and KMS key. This greatly simplifies things, but it needs to be documented.

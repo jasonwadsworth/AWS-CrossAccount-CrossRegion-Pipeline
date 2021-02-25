@@ -70,7 +70,7 @@ Resources:
     Type: 'AWS::CodeBuild::Project'
     Properties:
       Description: Continuous integration build for ExampleProject
-      Name: ExampleProject
+      Name: ExampleProject-Test
       Artifacts:
         Type: S3
         Packaging: ZIP
@@ -104,8 +104,8 @@ Resources:
   CodeBuildDeployProject:
     Type: 'AWS::CodeBuild::Project'
     Properties:
-      Description: Continuous integration build for ExampleProject
-      Name: ExampleProject
+      Description: Deploy build for ExampleProject
+      Name: ExampleProject-Deploy
       Artifacts:
         Type: S3
         Packaging: ZIP

@@ -47,10 +47,48 @@ Resources:
       DisplayName: Topic for pipeline manual intervention notifications
       TopicName: PipelineManualIntervention
 
-  CrossAccountCloudFormationRole:
+  CodeBuildRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CrossAccount-CloudFormation
+      RoleName: CrossAccount-CodeBuild
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: codebuild.amazonaws.com
+      Path: /cross-account-service-role/
+      ManagedPolicyArns:
+        - !Ref CodeBuildPolicy
+
+  CodeBuildPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for Cross Account CodeBuild projects
+      ManagedPolicyName: CrossAccount-CodeBuild
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+            Effect: Allow
+          - Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectVersion
+            Resource:
+              - !Sub arn:aws:s3:::${BuildBucket}
+              - !Sub arn:aws:s3:::${BuildBucket}/*
+            Effect: Allow
+      Path: /cross-account-service-role/
+
+  CrossAccountUpdatePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CrossAccount-UpdatePipeline
       Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
@@ -59,50 +97,48 @@ Resources:
             Principal:
               Service: cloudformation.amazonaws.com
       ManagedPolicyArns:
-        - !Ref CrossAccountCloudFormationPolicy
+        - !Ref CrossAccountUpdatePipelinePolicy
 
-  CrossAccountCloudFormationPolicy:
+  CrossAccountUpdatePipelinePolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      Description: Policy for Cross Account CloudFormation
-      ManagedPolicyName: CrossAccount-CloudFormation
+      Description: Policy for Cross Account Update Pipeline
+      ManagedPolicyName: CrossAccount-UpdatePipeline
       Path: /cross-account-service-role/
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Action:
-              - s3:GetBucketAcl
-              - s3:GetBucketLocation
-              - s3:GetObject
-              - s3:GetObjectVersion
-            Effect: Allow
-            Resource:
-              - !Sub arn:aws:s3:::${PipelineBucket}
-              - !Sub arn:aws:s3:::${PipelineBucket}/*
-          - Action: cloudformation:*
-            Effect: Allow
-            Resource: '*'
-          - Effect: Allow
-            Action:
-              - kms:Decrypt
-              - kms:GenerateDataKey*
-            Resource:
-              - !GetAtt KMSKey.Arn
+              - codebuild:CreateProject
+              - codebuild:CreateWebhook
+              - codebuild:DeleteProject
+              - codebuild:DeleteSourceCredentials
+              - codebuild:DeleteWebhook
+              - codebuild:ImportSourceCredentials
+              - codebuild:InvalidateProjectCache
+              - codebuild:ListProjects
+              - codebuild:ListSourceCredentials
+              - codebuild:PutResourcePolicy
+              - codebuild:UpdateProject
+              - codebuild:UpdateWebhook
 
-          # if using GitHub in your pipeline you should store the token in a secret named 'github-access-token'
-          - Action:
-              - secretsmanager:GetSecretValue
-            Effect: Allow
-            Resource:
-              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:github-access-token-*
-
-          - Action:
-              # this really only needs to do things locally, so update pipelines, and run cloudformation for those pipelines
-              - cloudformation:*
-
-              - codebuild:* # this should just be permission to update a build, not run one
-
-              - codepipeline:*
+              - codepipeline:CreateCustomActionType
+              - codepipeline:CreatePipeline
+              - codepipeline:DeleteCustomActionType
+              - codepipeline:DeletePipeline
+              - codepipeline:DeleteWebhook
+              - codepipeline:DeregisterWebhookWithThirdParty
+              - codepipeline:GetPipeline
+              - codepipeline:ListActionTypes
+              - codepipeline:ListPipelines
+              - codepipeline:ListTagsForResource
+              - codepipeline:ListWebhooks
+              - codepipeline:PutActionRevision
+              - codepipeline:PutWebhook
+              - codepipeline:RegisterWebhookWithThirdParty
+              - codepipeline:TagResource
+              - codepipeline:UntagResource
+              - codepipeline:UpdatePipeline
             Effect: Allow
             Resource:
               - '*'

@@ -38,46 +38,12 @@ Conditions:
       - true
       - !Ref DeveloperAccount
 Resources:
-  CodeBuildRole:
-    Type: 'AWS::IAM::Role'
+  CodeBuildLogGroup:
+    Type: AWS::Logs::LogGroup
     Properties:
-      RoleName: ExampleProject-CodeBuild
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: 'sts:AssumeRole'
-            Effect: Allow
-            Principal:
-              Service: codebuild.amazonaws.com
-      Path: /cross-account-service-role/
-      ManagedPolicyArns:
-        - !Ref CodeBuildPolicy
-  CodeBuildPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
-    Properties:
-      Description: Policy for ExampleProject CodeBuild project
-      ManagedPolicyName: ExampleProject-CodeBuild
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action:
-              - 'logs:CreateLogGroup'
-              - 'logs:CreateLogStream'
-              - 'logs:PutLogEvents'
-            Resource: !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/ExampleProject*'
-            Effect: Allow
-          - Action:
-              - 's3:PutObject'
-              - 's3:GetObject'
-              - 's3:GetObjectVersion'
-            Resource:
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}'
-                  - Bucket: !ImportValue BuildBucket
-              - 'Fn::Sub':
-                  - 'arn:aws:s3:::${Bucket}/*'
-                  - Bucket: !ImportValue BuildBucket
-            Effect: Allow
-      Path: /cross-account-service-role/
+      LogGroupName: /aws/codebuild/ExampleProject-Test
+      RetentionInDays: 3
+
   CodeBuildProject:
     Type: 'AWS::CodeBuild::Project'
     Properties:
@@ -98,7 +64,7 @@ Resources:
           Name: ExampleProject.LambdaFunction-Test.zip # it is important that this name is NOT the same as the other build because that one will be used in a deploy
           OverrideArtifactName: false
           Path: ExampleProject/LambdaFunction
-      ServiceRole: !GetAtt CodeBuildRole.Arn
+      ServiceRole: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodeBuild
       Environment:
         Type: LINUX_CONTAINER
         Image: 'aws/codebuild/dot-net:core-2.1'
@@ -117,6 +83,13 @@ Resources:
         BuildSpec: buildspec.yml
         Location: !Ref GitHubUrl
         ReportBuildStatus: true
+
+  CodeBuildDeployLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/codebuild/ExampleProject-Deploy
+      RetentionInDays: 3
+
   CodeBuildDeployProject:
     Type: 'AWS::CodeBuild::Project'
     Properties:
@@ -137,7 +110,7 @@ Resources:
           Name: ExampleProject.LambdaFunction.zip
           OverrideArtifactName: false
           Path: ExampleProject/LambdaFunction
-      ServiceRole: !GetAtt CodeBuildRole.Arn
+      ServiceRole: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodeBuild
       Environment:
         Type: LINUX_CONTAINER
         Image: 'aws/codebuild/dot-net:core-2.1'
@@ -164,6 +137,7 @@ Resources:
         BuildSpec: buildspec.yml
         Location: !Ref GitHubUrl
         ReportBuildStatus: true
+
   Pipeline:
     Type: 'AWS::CodePipeline::Pipeline'
     Properties:
@@ -244,7 +218,7 @@ Resources:
                     "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}",
                     "DeveloperAccount": "${DeveloperAccount}"
                   }
-                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CloudFormation'
+                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
               InputArtifacts:
                 - Name: PrimaryOutput
               Region: !Ref AWS::Region
@@ -261,7 +235,7 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject-Pipeline
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CloudFormation'
+                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
               Region: !Ref AWS::Region
               RunOrder: 2
               RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline'

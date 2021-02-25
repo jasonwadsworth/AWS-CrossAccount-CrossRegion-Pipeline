@@ -73,6 +73,11 @@ Resources:
                   - HasSecondaryRegion
                   - !Ref SecondaryCrossAccountCMK
                   - !Ref AWS::NoValue
+      Roles:
+        - Fn::If:
+            - IsBuildAccount
+            - CrossAccount-UpdatePipeline # If we are in the build account we'll need this to allow updates of a pipeline
+            - !Ref AWS::NoValue
 
   CrossAccountCloudFormationPolicyBuilderRole:
     Type: AWS::IAM::Role
@@ -137,10 +142,6 @@ Resources:
       PolicyName: CrossAccount-CloudFormation-PolicyBuilder
       Roles:
         - !Ref CrossAccountCloudFormationPolicyBuilderRole
-        - Fn::If:
-            - IsBuildAccount
-            - CrossAccount-CloudFormation
-            - !Ref AWS::NoValue
 
   CrossAccountCodePipelineRole:
     Type: AWS::IAM::Role
@@ -195,12 +196,12 @@ Resources:
               - sts:AssumeRole
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::*:role/cross-account-service-role/*
+              - arn:aws:iam::*:role/cross-account-service-role/*
           - Action:
               - iam:PassRole
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::*:role/cross-account-service-role/*
+              - arn:aws:iam::*:role/cross-account-service-role/*
       PolicyName: CrossAccount-CodePipeline
       Roles:
         - !Ref CrossAccountCodePipelineRole

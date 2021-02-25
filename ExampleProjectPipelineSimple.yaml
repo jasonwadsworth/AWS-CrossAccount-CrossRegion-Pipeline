@@ -153,10 +153,10 @@ Resources:
           Fn::If:
             - IsDeveloperAccount
             - !Ref AWS::NoValue
-            - - Type: EVENT
-                Pattern: PUSH
-              - Type: HEAD_REF
-                Pattern: ^refs/heads/master$
+            - - - Type: EVENT
+                  Pattern: PUSH
+                - Type: HEAD_REF
+                  Pattern: ^refs/heads/master$
       Source:
         Auth:
           Type: OAUTH

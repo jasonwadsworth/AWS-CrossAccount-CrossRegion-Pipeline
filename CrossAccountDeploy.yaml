@@ -23,6 +23,8 @@ Conditions:
           - ''
           - !Ref SecondaryPipelineBucket
 Resources:
+  # this policy grant general permissions to work with cross account stacks pipelines.
+  # specifically, it grants access to the source pipeline S3 buckets, and the KMS keys used by those buckets, as well as all CloudFormation permissions
   CrossAccountBasePolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
@@ -83,6 +85,9 @@ Resources:
       Path: /cross-account-service-role/
       RoleName: CrossAccount-CloudFormation-PolicyBuilder
 
+  # this policy grants permissions to create and modify policy that will be used to deploy a service
+  # each service, as a part of it's deployment process, should use this policy to grant to create the roles used for it's deployment
+  # this allows the developers to control the permissions that they need while giving visibility to changes on a per service bases
   CrossAccountCloudFormationPolicyBuilderPolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -149,6 +154,8 @@ Resources:
       Path: /cross-account-service-role/
       RoleName: CrossAccount-CodePipeline
 
+  # this policy grants permissions to for code pipeline to be able to perform actions initiated by CodePipeline, including the ability to assume and pass roles for deployment
+  # if you need to peform something in CodePipeline that is not in this list it will need to be updated
   CrossAccountCodePipelinePolicy:
     Type: AWS::IAM::Policy
     Properties:
@@ -177,7 +184,7 @@ Resources:
               - s3:GetBucketLocation
             Resource: '*'
           - Action:
-              - 'sts:AssumeRole'
+              - sts:AssumeRole
             Effect: Allow
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*

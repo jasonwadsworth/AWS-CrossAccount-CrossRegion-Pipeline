@@ -47,6 +47,66 @@ Resources:
       DisplayName: Topic for pipeline manual intervention notifications
       TopicName: PipelineManualIntervention
 
+  CrossAccountCloudFormationRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CrossAccount-CloudFormation
+      Path: /cross-account-service-role/
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+      ManagedPolicyArns:
+        - !Ref CrossAccountCloudFormationPolicy
+
+  CrossAccountCloudFormationPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy for Cross Account CloudFormation
+      ManagedPolicyName: CrossAccount-CloudFormation
+      Path: /cross-account-service-role/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - s3:GetBucketAcl
+              - s3:GetBucketLocation
+              - s3:GetObject
+              - s3:GetObjectVersion
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
+          - Action: cloudformation:*
+            Effect: Allow
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - kms:Decrypt
+              - kms:GenerateDataKey*
+            Resource:
+              - !GetAtt KMSKey.Arn
+
+          # if using GitHub in your pipeline you should store the token in a secret named 'github-access-token'
+          - Action:
+              - secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:github-access-token-*
+
+          - Action:
+              # this really only needs to do things locally, so update pipelines, and run cloudformation for those pipelines
+              - cloudformation:*
+
+              - codebuild:* # this should just be permission to update a build, not run one
+
+              - codepipeline:*
+            Effect: Allow
+            Resource:
+              - '*'
+
   # this is the bucket that will be used for build artifacts, either from local builds or from builds originating in another account
   BuildBucket:
     Type: AWS::S3::Bucket
@@ -94,6 +154,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: CrossAccount-PipelineSource
+      Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
           - Action: sts:AssumeRole
@@ -109,6 +170,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: CrossAccount-PipelineSource
+      Path: /cross-account-service-role/
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -137,7 +199,7 @@ Resources:
           - Action:
               - iam:PassRole
             Effect: Allow
-            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
           - Action:
               - sts:AssumeRole
             Effect: Allow
@@ -152,11 +214,9 @@ Resources:
     Type: Custom::RegisterForReplication
     Properties:
       ServiceToken: !Ref ReplicationRegistrationTopicArn
-      BucketArn: !Ref BuildBucket #rename this to BucketName
+      BucketName: !Ref BuildBucket
       AccountId: !Ref AWS::AccountId
       Region: !Ref AWS::Region
-      RoleArn: !Sub arn:aws:iam::${BuildAccountId}:role/ReplicationRegistrationInvokeRole
-      FunctionArn: !Sub arn:aws:lambda:us-west-2:${BuildAccountId}:function:CrossAccountReplicationRegistration
 Outputs:
   CMK:
     Description: The CMK that is used for cross account access

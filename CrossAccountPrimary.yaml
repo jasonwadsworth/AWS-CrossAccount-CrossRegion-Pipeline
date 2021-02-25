@@ -5,33 +5,33 @@ Parameters:
     Description: A comma separated list of OUs that can be deployed to. This OUs will have access to the pipeline artifacts.
     Type: String
 Resources:
-  # This KMS key is for use with the cross account build/deploment. The permermissions allow the
+  # This KMS key is for use with the cross account build/deploment. The permissions allow the
   # CrossAccount-CodePipeline role within the deployment organization to use the key.
   KMSKey:
-    Type: 'AWS::KMS::Key'
+    Type: AWS::KMS::Key
     Properties:
       Description: Used by Assumed Roles in deploy accounts to Encrypt/Decrypt code
       EnableKeyRotation: true
       KeyPolicy:
         Version: '2012-10-17'
-        Id: !Ref 'AWS::StackName'
+        Id: !Ref AWS::StackName
         Statement:
           - Sid: Allows admin of the key
             Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
             Action:
-              - 'kms:*'
+              - kms:*
             Resource: '*'
           - Effect: Allow
             Principal:
               AWS: '*'
             Action:
-              - 'kms:Encrypt'
-              - 'kms:Decrypt'
-              - 'kms:ReEncrypt*'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
             Resource: '*'
             Condition:
               ArnLike:
@@ -41,21 +41,22 @@ Resources:
                   Fn::Split:
                     - ','
                     - !Ref DeploymentOrgPath
+
   KMSAlias:
-    Type: 'AWS::KMS::Alias'
+    Type: AWS::KMS::Alias
     Properties:
       AliasName: alias/codepipeline-crossaccounts
       TargetKeyId: !Ref KMSKey
 
   # Topic to be used for manual intervention notification in a pipeline.
   ManualInterventionTopic:
-    Type: 'AWS::SNS::Topic'
+    Type: AWS::SNS::Topic
     Properties:
       DisplayName: Topic for pipeline manual intervention notifications
       TopicName: PipelineManualIntervention
 
   CrossAccountCodePipelineRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       RoleName: CrossAccount-CodePipeline
       Path: /cross-account-service-role/
@@ -63,18 +64,18 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
-            Action: 'sts:AssumeRole'
+            Action: sts:AssumeRole
             Principal:
               AWS: !Ref AWS::AccountId
           - Effect: Allow
-            Action: 'sts:AssumeRole'
+            Action: sts:AssumeRole
             Principal:
               Service: codepipeline.amazonaws.com
       ManagedPolicyArns:
         - !Ref CrossAccountCodePipelinePolicy
 
   CrossAccountCodePipelinePolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
+    Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: CrossAccount-CodePipeline
       Path: /cross-account-service-role/
@@ -83,60 +84,60 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
-              - 'codepipeline:*'
-              - 'iam:ListRoles'
-              - 'cloudformation:Describe*'
-              - 'cloudFormation:List*'
-              - 'codebuild:BatchGetBuilds'
-              - 'codebuild:StartBuild'
-              - 'cloudformation:CreateStack'
-              - 'cloudformation:DeleteStack'
-              - 'cloudformation:DescribeStacks'
-              - 'cloudformation:UpdateStack'
-              - 'cloudformation:CreateChangeSet'
-              - 'cloudformation:DeleteChangeSet'
-              - 'cloudformation:DescribeChangeSet'
-              - 'cloudformation:ExecuteChangeSet'
-              - 'cloudformation:SetStackPolicy'
-              - 'cloudformation:ValidateTemplate'
-              - 's3:ListAllMyBuckets'
-              - 's3:GetBucketLocation'
+              - codepipeline:*
+              - iam:ListRoles
+              - cloudformation:Describe*
+              - cloudFormation:List*
+              - codebuild:BatchGetBuilds
+              - codebuild:StartBuild
+              - cloudformation:CreateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:UpdateStack
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:SetStackPolicy
+              - cloudformation:ValidateTemplate
+              - s3:ListAllMyBuckets
+              - s3:GetBucketLocation
             Resource: '*'
           - Effect: Allow
             Action:
-              - 'kms:*'
+              - kms:*
             Resource:
               - !GetAtt KMSKey.Arn
           - Action:
-              - 'sns:Publish'
+              - sns:Publish
             Effect: Allow
             Resource: !Ref ManualInterventionTopic
           - Action:
-              - 's3:List*'
-              - 's3:Get*'
+              - s3:List*
+              - s3:Get*
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${BuildBucket}'
-              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
+              - !Sub arn:aws:s3:::${BuildBucket}
+              - !Sub arn:aws:s3:::${BuildBucket}/*
           - Action:
-              - 's3:*'
+              - s3:*
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${PipelineBucket}'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
           - Action:
-              - 'lambda:invoke*'
+              - lambda:invoke*
             Effect: Allow
             Resource: !GetAtt SyncArtifactsFunction.Arn
           - Action:
-              - 'sts:AssumeRole'
+              - sts:AssumeRole
             Effect: Allow
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CloudFormation
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
           - Action:
-              - 'sts:AssumeRole'
+              - sts:AssumeRole
             Effect: Allow
             Resource:
               - arn:aws:iam::*:role/cross-account-service-role/CrossAccount-CodePipeline
@@ -148,22 +149,21 @@ Resources:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CloudFormation
 
   CrossAccountCloudFormationRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       RoleName: CrossAccount-CloudFormation
       Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
-          - Action: 'sts:AssumeRole'
+          - Action: sts:AssumeRole
             Effect: Allow
             Principal:
               Service: cloudformation.amazonaws.com
       ManagedPolicyArns:
         - !Ref CrossAccountCloudFormationPolicy
-        - !Ref CrossAccountDeployPolicy
 
   CrossAccountCloudFormationPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
+    Type: AWS::IAM::ManagedPolicy
     Properties:
       Description: Policy for Cross Account CloudFormation
       ManagedPolicyName: CrossAccount-CloudFormation
@@ -180,13 +180,13 @@ Resources:
             Resource:
               - !Sub arn:aws:s3:::${PipelineBucket}
               - !Sub arn:aws:s3:::${PipelineBucket}/*
-          - Action: 'cloudformation:*'
+          - Action: cloudformation:*
             Effect: Allow
             Resource: '*'
           - Effect: Allow
             Action:
-              - 'kms:Decrypt'
-              - 'kms:GenerateDataKey*'
+              - kms:Decrypt
+              - kms:GenerateDataKey*
             Resource:
               - !GetAtt KMSKey.Arn
 
@@ -201,340 +201,16 @@ Resources:
               # this really only needs to do things locally, so update pipelines, and run cloudformation for those pipelines
               - cloudformation:*
 
-              - cloudwatch:DeleteAlarms
-              - cloudwatch:DeleteDashboards
-              - cloudwatch:Describe*
-              - cloudwatch:EnableAlarmActions
-              - cloudwatch:GetDashboard
-              - cloudwatch:List*
-              - cloudwatch:PutDashboard
-              - cloudwatch:PutMetricAlarm
-              - cloudwatch:TagResource
-              - cloudwatch:UntagResource
+              - codebuild:* # this should just be permission to update a build, not run one
 
-              - codebuild:*
-
-              - codepipeline:CreatePipeline
-              - codepipeline:DeletePipeline
-              - codepipeline:GetPipeline
-              - codepipeline:ListPipelines
-              - codepipeline:StartPipelineExecution
-              - codepipeline:TagResource
-              - codepipeline:UntagResource
-              - codepipeline:UpdatePipeline
-
-              - events:DeleteRule
-              - events:DescribeRule
-              - events:DisableRule
-              - events:EnableRule
-              - events:PutRule
-              - events:PutTargets
-              - events:RemoveTargets
-
-              - logs:*
+              - codepipeline:*
             Effect: Allow
             Resource:
               - '*'
-
-          - Action:
-              - iam:AddRoleToInstanceProfile
-              - iam:AttachRolePolicy
-              - iam:CreateInstanceProfile
-              - iam:CreatePolicy
-              - iam:CreatePolicyVersion
-              - iam:CreateRole
-              - iam:CreateServiceLinkedRole
-              - iam:DeleteInstanceProfile
-              - iam:DeletePolicy
-              - iam:DeletePolicyVersion
-              - iam:DeleteRole
-              - iam:DeleteRolePolicy # inline roles - remove if not allowed
-              - iam:DeleteServiceLinkedRole
-              - iam:DetachRolePolicy
-              - iam:GetInstanceProfile
-              - iam:GetPolicy
-              - iam:GetPolicyVersion
-              - iam:GetRole
-              - iam:GetRolePolicy # inline roles - remove if not allowed
-              - iam:ListAttachedRolePolicies
-              - iam:ListEntitiesForPolicy
-              - iam:ListInstanceProfiles
-              - iam:ListInstanceProfilesForRole
-              - iam:ListPolicies
-              - iam:ListPolicyVersions
-              - iam:ListRolePolicies # inline roles - remove if not allowed
-              - iam:ListRoleTags
-              - iam:ListRoles
-              - iam:PassRole
-              - iam:PutRolePolicy # inline roles - remove if not allowed
-              - iam:RemoveRoleFromInstanceProfile
-              - iam:SetDefaultPolicyVersion
-              - iam:TagRole
-              - iam:UntagRole
-              - iam:UpdateRole
-              - iam:UpdateRoleDescription
-            Effect: Allow
-            Resource:
-              - '*' # use a path to allow this to be more specific
-
-  CrossAccountDeployPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
-    Properties:
-      Description: Policy for CloudFormation to deploy resources - Change this policy to meet your needs
-      ManagedPolicyName: CrossAccount-Deploy
-      Path: /cross-account-service-role/
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action:
-              - amplify:CreateApp
-              - amplify:CreateBranch
-              - amplify:CreateDeployment
-              - amplify:CreateDomainAssociation
-              - amplify:CreateWebHook
-              - amplify:DeleteApp
-              - amplify:DeleteBranch
-              - amplify:DeleteDomainAssociation
-              - amplify:DeleteWebHook
-              - amplify:GetApp
-              - amplify:GetBranch
-              - amplify:GetDomainAssociation
-              - amplify:GetWebHook
-              - amplify:StartDeployment
-              - amplify:TagResource
-              - amplify:UpdateApp
-              - amplify:UpdateWebHook
-              - amplify:UntagResource
-              - amplify:UpdateBranch
-              - amplify:UpdateDomainAssociation
-
-              - acm:AddTagsToCertificate
-              - acm:DeleteCertificate
-              - acm:DescribeCertificate
-              - acm:GetCertificate
-              - acm:List*
-              - acm:RemoveTagsFromCertificate
-              - acm:RenewCertificate
-              - acm:RequestCertificate
-              - acm:UpdateCertificateOptions
-
-              - apigateway:*
-
-              - cloudfront:CreateDistribution
-              - cloudfront:CreateInvalidation
-              - cloudfront:DeleteDistribution
-              - cloudfront:GetDistribution
-              - cloudfront:ListDistributions
-              - cloudfront:UpdateDistribution
-
-              - cloudwatch:DeleteAlarms
-              - cloudwatch:DeleteDashboards
-              - cloudwatch:Describe*
-              - cloudwatch:EnableAlarmActions
-              - cloudwatch:GetDashboard
-              - cloudwatch:List*
-              - cloudwatch:PutDashboard
-              - cloudwatch:PutMetricAlarm
-              - cloudwatch:TagResource
-              - cloudwatch:UntagResource
-
-              - codebuild:*
-
-              - cognito-idp:UpdateUserPool
-
-              - dynamodb:CreateGlobalTable
-              - dynamodb:CreateTable*
-              - dynamodb:DeleteTable*
-              - dynamodb:Describe*
-              - dynamodb:List*
-              - dynamodb:TagResource
-              - dynamodb:UntagResource
-              - dynamodb:UpdateContinuousBackups
-              - dynamodb:UpdateGlobalTable*
-              - dynamodb:UpdateTable*
-              - dynamodb:UpdateTimeToLive
-
-              - es:Add*
-              - es:Create*
-              - es:Describe*
-              - es:Delete*
-              - es:Get*
-              - es:List*
-              - es:RemoveTags
-              - es:UpdateElasticsearchDomainConfig
-              - es:UpgradeElasticsearchDomain
-              - es:ESHttp*
-
-              - events:DeleteRule
-              - events:DescribeRule
-              - events:DisableRule
-              - events:EnableRule
-              - events:PutRule
-              - events:PutTargets
-              - events:RemoveTargets
-
-              - firehose:CreateDeliveryStream
-              - firehose:DeleteDeliveryStream
-              - firehose:DescribeDeliveryStream
-              - firehose:List*
-              - firehose:StartDeliveryStreamEncryption
-              - firehose:StopDeliveryStreamEncryption
-              - firehose:TagDeliveryStream
-              - firehose:UntagDeliveryStream
-              - firehose:UpdateDestination
-
-              - kinesis:PutRecords # is this right? doesn't seem like the deployment should be doing this
-
-              - lambda:AddLayerVersionPermission
-              - lambda:AddPermission
-              - lambda:CreateAlias
-              - lambda:CreateEventSourceMapping
-              - lambda:CreateFunction
-              - lambda:DeleteAlias
-              - lambda:DeleteEventSourceMapping
-              - lambda:DeleteFunction*
-              - lambda:DeleteLayerVersion
-              - lambda:DeleteProvisionedConcurrencyConfig
-              - lambda:GetAccountSettings
-              - lambda:GetAlias
-              - lambda:GetEventSourceMapping
-              - lambda:GetFunction*
-              - lambda:GetLayerVersion*
-              - lambda:GetPolicy
-              - lambda:GetProvisionedConcurrencyConfig
-              - lambda:List*
-              - lambda:PublishLayerVersion
-              - lambda:PublishVersion
-              - lambda:PutFunctionConcurrency
-              - lambda:PutFunctionEventInvokeConfig
-              - lambda:PutProvisionedConcurrencyConfig
-              - lambda:RemoveLayerVersionPermission
-              - lambda:RemovePermission
-              - lambda:TagResource
-              - lambda:UntagResource
-              - lambda:UpdateAlias
-              - lambda:UpdateEventSourceMapping
-              - lambda:UpdateFunction*
-
-              - logs:*
-
-              - route53:ChangeResourceRecordSets
-              - route53:GetChange
-              - route53:GetHostedZone
-              - route53:ListHostedZones
-              - route53:ListResourceRecordSets
-
-              - s3:CreateAccessPoint
-              - s3:CreateBucket
-              - s3:DeleteAccessPoint*
-              - s3:DeleteBucket*
-              - s3:GetAccessPoint*
-              - s3:GetAccountPublicAccessBlock
-              - s3:Get*Configuration
-              - s3:GetBucket*
-              - s3:List*
-              - s3:ObjectOwnerOverrideToBucketOwner
-              - s3:PutAccessPointPolicy
-              - s3:PutAccountPublicAccessBlock
-              - s3:Put*Configuration
-              - s3:PutBucket*
-
-              - secretsmanager:CreateSecret
-              - secretsmanager:DeleteResourcePolicy
-              - secretsmanager:DeleteSecret
-              - secretsmanager:Describe*
-              - secretsmanager:GetResourcePolicy
-              - secretsmanager:List*
-              - secretsmanager:PutResourcePolicy
-              - secretsmanager:PutSecretValue
-              - secretsmanager:TagResource
-              - secretsmanager:UntagResource
-              - secretsmanager:UpdateSecret
-
-              - sns:AddPermission
-              - sns:ConfirmSubscription # not sure if this is needed for auto confirmed subscriptions
-              - sns:CreateTopic
-              - sns:DeleteTopic
-              - sns:GetSubscriptionAttributes
-              - sns:GetTopicAttributes
-              - sns:List*
-              - sns:RemovePermission
-              - sns:SetSubscriptionAttributes
-              - sns:SetTopicAttributes
-              - sns:Subscribe
-              - sns:TagResource
-              - sns:Unsubscribe
-              - sns:UntagResource
-
-              - sqs:AddPermission
-              - sqs:CreateQueue
-              - sqs:DeleteQueue
-              - sqs:GetQueueAttributes
-              - sqs:GetQueueUrl
-              - sqs:List*
-              - sqs:RemovePermission
-              - sqs:SetQueueAttributes
-              - sqs:TagQueue
-              - sqs:UntagQueue
-
-              - ssm:AddTagsToResource
-              - ssm:DeleteParameter
-              - ssm:Describe*
-              - ssm:GetParameter
-              - ssm:GetParameterHistory
-              - ssm:LabelParameterVersion
-              - ssm:List*
-              - ssm:PutParameter
-              - ssm:RemoveTagsFromResource
-
-            Effect: Allow
-            Resource:
-              - '*'
-
-          - Action:
-              - iam:AddRoleToInstanceProfile
-              - iam:AttachRolePolicy
-              - iam:CreateInstanceProfile
-              - iam:CreatePolicy
-              - iam:CreatePolicyVersion
-              - iam:CreateRole
-              - iam:CreateServiceLinkedRole
-              - iam:DeleteInstanceProfile
-              - iam:DeletePolicy
-              - iam:DeletePolicyVersion
-              - iam:DeleteRole
-              - iam:DeleteRolePolicy # inline roles - remove if not allowed
-              - iam:DeleteServiceLinkedRole
-              - iam:DetachRolePolicy
-              - iam:GetInstanceProfile
-              - iam:GetPolicy
-              - iam:GetPolicyVersion
-              - iam:GetRole
-              - iam:GetRolePolicy # inline roles - remove if not allowed
-              - iam:ListAttachedRolePolicies
-              - iam:ListEntitiesForPolicy
-              - iam:ListInstanceProfiles
-              - iam:ListInstanceProfilesForRole
-              - iam:ListPolicies
-              - iam:ListPolicyVersions
-              - iam:ListRolePolicies # inline roles - remove if not allowed
-              - iam:ListRoleTags
-              - iam:ListRoles
-              - iam:PassRole
-              - iam:PutRolePolicy # inline roles - remove if not allowed
-              - iam:RemoveRoleFromInstanceProfile
-              - iam:SetDefaultPolicyVersion
-              - iam:TagRole
-              - iam:UntagRole
-              - iam:UpdateRole
-              - iam:UpdateRoleDescription
-            Effect: Allow
-            Resource:
-              - '*' # use a path to allow this to be more specific
 
   # Role for the sync artifacts function.
   SyncArtifactsRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       RoleName: CrossAccount-PipelineSyncArtifacts
       Path: /cross-account-service-role/
@@ -544,15 +220,14 @@ Resources:
           - Effect: Allow
             Principal:
               Service: lambda.amazonaws.com
-            Action: 'sts:AssumeRole'
+            Action: sts:AssumeRole
       ManagedPolicyArns:
         - !Ref SyncArtifactsPolicy
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
 
   # This policy gives the sync artifacts function permission to decrypt with KMS key
   # and to send updates to CodePipeline.
   SyncArtifactsPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
+    Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: CrossAccount-PipelineSyncArtifacts
       Path: /cross-account-service-role/
@@ -561,26 +236,39 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Action:
-              - 'kms:*'
+              - kms:*
             Effect: Allow
             Resource:
               - !GetAtt KMSKey.Arn
           - Action:
-              - 's3:*'
+              - s3:*
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${PipelineBucket}'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
           - Action:
-              - 'codepipeline:*' # pretty sure this doesn't need to be star.
+              - codepipeline:* # pretty sure this doesn't need to be star.
             Effect: Allow
             Resource: '*'
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccountDeveloperBuildReplicationRegistration
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccountDeveloperBuildReplicationRegistration:*
+
+  SyncArtifactsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/CrossAccount-PipelineSyncArtifacts
+      RetentionInDays: 3
 
   # This function takes the artifacts supplied to it and makes sure they are available in the
   # requested region. This function should be called from CodePipeline. The CodePipeline step
   # should include all the input artifacts that will be needed in the destination region.
   SyncArtifactsFunction:
-    Type: 'AWS::Lambda::Function'
+    Type: AWS::Lambda::Function
     Properties:
       Code:
         ZipFile: |
@@ -694,18 +382,18 @@ Resources:
 
   # Basic permissions to allow CodePipeline to call the sync function.
   SyncArtifactsLambdaPermission:
-    Type: 'AWS::Lambda::Permission'
+    Type: AWS::Lambda::Permission
     Properties:
-      Action: 'lambda:InvokeFunction'
+      Action: lambda:InvokeFunction
       FunctionName: !Ref SyncArtifactsFunction
       Principal: codepipeline.amazonaws.com
-      SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn: !Sub 'arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:*'
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:*
 
   # This is the bucket where build artifacts are put. CodeBuild should place things here, and
   # CodePipeline should trigger off specific artifacts.
   BuildBucket:
-    Type: 'AWS::S3::Bucket'
+    Type: AWS::S3::Bucket
     Properties:
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -718,32 +406,32 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
-              SSEAlgorithm: 'aws:kms'
+              SSEAlgorithm: aws:kms
 
   # This is the bucket that is used for CodePipeline, in the primary region
   PipelineBucket:
-    Type: 'AWS::S3::Bucket'
+    Type: AWS::S3::Bucket
     Properties:
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
-              SSEAlgorithm: 'aws:kms'
+              SSEAlgorithm: aws:kms
 
   # Grant access to the cross account CloudFormation and CodePipeline roles within the deployment
   # organization
   PipelineBucketPolicy:
-    Type: 'AWS::S3::BucketPolicy'
+    Type: AWS::S3::BucketPolicy
     Properties:
       Bucket: !Ref PipelineBucket
       PolicyDocument:
         Statement:
           - Action:
-              - 's3:*'
+              - s3:*
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${PipelineBucket}'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
             Principal: '*'
             Condition:
               ArnLike:
@@ -756,23 +444,23 @@ Resources:
 
   # This role can be used as the pipeline source in any pipeline
   PipelineSourceRole:
-    Type: 'AWS::IAM::Role'
+    Type: AWS::IAM::Role
     Properties:
       RoleName: CrossAccount-PipelineSource
       Path: /cross-account-service-role/
       AssumeRolePolicyDocument:
         Statement:
-          - Action: 'sts:AssumeRole'
+          - Action: sts:AssumeRole
             Effect: Allow
             Principal:
-              AWS: !Ref 'AWS::AccountId'
+              AWS: !Ref AWS::AccountId
       ManagedPolicyArns:
         - !Ref PipelineSourcePolicy
 
   # This policy grants the pipeline source permission to access the S3 buckets for build and pipelines
   # as well as permission to use the KMS key, assume the CrossAccount-PipelineSource role and passrole to the CrossAccount-PipelineSource role
   PipelineSourcePolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
+    Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: CrossAccount-PipelineSource
       Path: /cross-account-service-role/
@@ -784,29 +472,29 @@ Resources:
             Effect: Allow
             Resource: '*'
           - Action:
-              - 's3:GetBucketLocation'
-              - 's3:List*'
-              - 's3:Get*'
-              - 's3:Put*'
+              - s3:GetBucketLocation
+              - s3:List*
+              - s3:Get*
+              - s3:Put*
             Effect: Allow
             Resource:
-              - !Sub 'arn:aws:s3:::${BuildBucket}'
-              - !Sub 'arn:aws:s3:::${BuildBucket}/*'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}'
-              - !Sub 'arn:aws:s3:::${PipelineBucket}/*'
+              - !Sub arn:aws:s3:::${BuildBucket}
+              - !Sub arn:aws:s3:::${BuildBucket}/*
+              - !Sub arn:aws:s3:::${PipelineBucket}
+              - !Sub arn:aws:s3:::${PipelineBucket}/*
           - Action:
-              - 'kms:Decrypt'
-              - 'kms:Encrypt'
-              - 'kms:GenerateDataKey*'
+              - kms:Decrypt
+              - kms:Encrypt
+              - kms:GenerateDataKey*
             Effect: Allow
             Resource:
               - !GetAtt KMSKey.Arn
           - Action:
-              - 'iam:PassRole'
+              - iam:PassRole
             Effect: Allow
             Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
           - Action:
-              - 'sts:AssumeRole'
+              - sts:AssumeRole
             Effect: Allow
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/CrossAccount-PipelineSource

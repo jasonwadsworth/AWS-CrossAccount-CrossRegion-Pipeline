@@ -56,28 +56,32 @@ That is all that is needed to create a pipeline that is cross account/cross regi
 ---
 ## Developer Account
 
-NOTE: this section is currently not accurate. We will be adding this support back in soon.
+If you want to support replication to developer accounts, there are a few things you'll need to do.
 
-If you are running in a developer account you'll want to take some steps to be sure things are always up to date in your account.
+First, you need to have organizations configured and have all of your developer accounts in the same organization.
 
-First, go through the steps of creating a cross account pipeline, treating your developer account as both the build account and the deployment account (you'll only deploy to one account), but you'll want to make a few small changes.
+Next, you'll need to create a stack using `CrossAccountDeveloperReplicate.yaml` in the build account, in the same region as your primary stack. There is only one parameter:
 
-In the primary stack:
-- you'll need to add the "real" build account's root account ARN to the _RootAccountArns_ parameter.
+- _DeveloperOrgPath_ - set this value to the path to your developer organization (e.g. o-abcdefghij/r-h123/ou-h123-3srqponml/). This organization should include all the developer accounts you want to automatically sync.
 
-You'll also need to run the `CrossAccountDeveloper.yaml` in the developer account. It has one parameter:
-- _ReplicationFunctionRoleArn_ - the role ARN from the primary account's replication function
+Once that is done you can create a stack using `CrossAccountDeveloper.yaml` in a developer account. Currently this stack has to be in the same region as the primary stack in the build account. This stack has three parameters:
 
-In the "real" build account you'll need to modify the replication settings:
-- add your artifact bucket to the _ReplicationBucketList_ parameter.
-- add your artifact bucket to the _ReplicationBucketStarArns_ parameter.
-- add your CMK to the _ReplicationCMKs_ parameter.
+- _BuildAccountId_ - set this value to the AWS account ID of the build account
+- _ReplicationRegistrationTopicArn_ - set this value to the output value by the same name, from the replicate stack in the build account.
+- _ReplicationRoleArn_ - set this value to the output value by the same name, from the replicate stack in the build account.
 
-Once this is done you will have a bucket that gets data both from your account's builds and the "real" build account's builds. This will keep your account in sync at all times, whilst allowing you to test on a private fork.
+Once your developer stack is done you'll need to create a stack using `CrossAccountDeploy.yaml`. This is the same stack you used above, for deploying to your different accounts. It has the following parmeters:
+
+- _BuildAccount_ - set this value to the AWS Account ID of the DEVELOPER account. Your developer account will be a build account just for you
+- _BuildAccountKMSKeyArn_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountDeveloper` stack.
+- _PipelineBucket_ - set this value to the `PipelineBucket` export value from the `CrossAccountDeveloper` stack
+- _SecondaryPipelineBucket_ - not used for developer accounts
+- _SecondaryCrossAccountCMK_ - not used for developer accounts
+
+
+Once this is done you will have a bucket that gets data both from your account's builds and the "real" build account's builds. This will keep your account in sync at all times, while allowing you to test on a private fork.
 
 
 Note On GitHub
 ----------------
 The ExampleProject project uses a GitHub hook for CodeBuild. This hook uses an OAuth connection to AWS, so no GitHub credentials are stored in AWS. In order to configure this you'll need to go to the CodeBuild page and start the process of creating a build project. Follow the directions in [this article](https://www.itonaut.com/2018/06/18/use-github-source-in-aws-codebuild-project-using-aws-cloudformation/) for direction of what you need to do (just the last part of the article).
-
-**_NOTE_**: Some of the permission grants in this code are beyond what you should grant. For example, in order to simplify the build/deploy the grants in the `CrossAccountDeploy.yaml` are very open (`CrossAccount-CloudFormationRole` is granted `arn:aws:iam::aws:policy/AdministratorAccess`). You should tighten these permissions to match the permissions you wish to have on your deployment process.

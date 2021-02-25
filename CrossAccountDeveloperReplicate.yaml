@@ -1,46 +1,27 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Cross account developer replication stack.
 Parameters:
-  # DeveloperOrgPath:
-  #   Type: String
-  CustomResourceServiceSnsTopicArn:
+  DeveloperOrgPath:
     Type: String
 Resources:
   # this table is used to manage where to replicate the build artifacts to
   Table:
     Type: 'AWS::DynamoDB::Table'
     Properties:
-      TableName: CrossAccountBuildReplication
+      TableName: CrossAccount-DeveloperBuildReplication
       AttributeDefinitions:
-        - AttributeName: pk
-          AttributeType: S
-        - AttributeName: sk
-          AttributeType: S
-        - AttributeName: gsi1_pk
-          AttributeType: S
-        - AttributeName: gsi1_sk
+        - AttributeName: id
           AttributeType: S
       BillingMode: PAY_PER_REQUEST
-      GlobalSecondaryIndexes:
-        - IndexName: gsi1
-          KeySchema:
-            - AttributeName: gsi1_pk
-              KeyType: HASH
-            - AttributeName: gsi1_sk
-              KeyType: RANGE
-          Projection:
-            ProjectionType: ALL
       KeySchema:
-        - AttributeName: pk
+        - AttributeName: id
           KeyType: HASH
-        - AttributeName: sk
-          KeyType: RANGE
 
   # Role for the replication registration function.
   ReplicationRegistrationRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: CrossAccountPipelineS3ReplicationRegistration
+      RoleName: CrossAccount-DeveloperBuildReplicationRegistration
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -50,23 +31,35 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - !Ref ReplicationRegistrationPolicy
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole' # I don't really like this policy
 
   # This policy allows the replication registration function to write data in the DynamoDB table
   ReplicationRegistrationPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
-      ManagedPolicyName: CrossAccountPipelineS3ReplicationRegistration
+      ManagedPolicyName: CrossAccount-DeveloperBuildReplicationRegistration
       Description: Policy for replicating S3 data for developer account pipelines
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Action:
-              - 'dynamodb:DeleteItem'
-              - 'dynamodb:PutItem'
+              - dynamodb:DeleteItem
+              - dynamodb:PutItem
             Effect: Allow
             Resource:
               - !GetAtt Table.Arn
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-DeveloperBuildReplicationRegistration'
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-DeveloperBuildReplicationRegistration:*'
+
+  ReplicationRegistrationLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: /aws/lambda/CrossAccount-DeveloperBuildReplicationRegistration
+      RetentionInDays: 3
 
   ReplicationRegistrationFunction:
     Type: 'AWS::Lambda::Function'
@@ -78,157 +71,154 @@ Resources:
           const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
           exports.handler = async function main(event, context) {
-            try {
-              const id = event.PhysicalResourceId || (Math.random().toString(36).substring(2, 16) + Math.random().toString(36).substring(2, 16)).toUpperCase();
+            console.info(JSON.stringify(event));
+            for (const record of event.Records) {
+              const message = JSON.parse(record.Sns.Message);
+              const id = message.PhysicalResourceId || message.ResourceProperties.BucketName;
+              try {
 
-              if (event.RequestType === 'Create') {
-                await dynamoDB.put({
-                  ConditionExpression: `attribute_not_exists(pk)`,
-                  TableName: 'CrossAccountBuildReplication',
-                  Item: {
-                    pk: id,
-                    sk: 'Primary',
-                    gsi1_pk: 'ReplicateBuildArtifact',
-                    gsi1_sk: `Bucket|${id}`,
-                    id: id,
-                    bucketArn: event.ResourceProperties.BucketArn,
-                    accountId: event.ResourceProperties.AccountId,
-                    region: event.ResourceProperties.Region
-                  }
-                }).promise();
-              }
-              else if (event.RequestType === 'Update') {
-                await dynamoDB.put({
-                  ConditionExpression: `attribute_exists(pk)`,
-                  TableName: 'CrossAccountBuildReplication',
-                  Item: {
-                    pk: id,
-                    sk: 'Primary',
-                    gsi1_pk: 'ReplicateBuildArtifact',
-                    gsi1_sk: `Bucket|${id}`,
-                    id: id,
-                    bucketArn: event.ResourceProperties.BucketArn,
-                    accountId: event.ResourceProperties.AccountId,
-                    region: event.ResourceProperties.Region
-                  }
-                }).promise();
-              }
-              else if (event.RequestType === 'Delete') {
-                await dynamoDB.delete({
-                  TableName: 'CrossAccountBuildReplication',
-                  Key: {
-                    "pk": id,
-                    sk: 'Primary'
-                  }
-                }).promise();
-              }
-              else {
-                return {
-                  Status: "FAILED",
-                  reason: `Unknown RequestType '${event.RequestType}'`
-                };
-              }
-
-              return {
-                Status: "SUCCESS",
-                PhysicalResourceId: id,
-                Data: {
-                  Name: "TheName"
+                if (message.RequestType === 'Create') {
+                  await dynamoDB.put({
+                    ConditionExpression: `attribute_not_exists(pk)`,
+                    TableName: 'CrossAccount-DeveloperBuildReplication',
+                    Item: {
+                      id: id,
+                      bucketName: message.ResourceProperties.BucketName,
+                      accountId: message.ResourceProperties.AccountId,
+                      region: message.ResourceProperties.Region
+                    }
+                  }).promise();
                 }
-              };
-            }
-            catch (e) {
-              console.error(e);
-              return {
-                Status: "FAILED",
-                reason: `Error registering.`
-              };
+                else if (message.RequestType === 'Update') {
+                  await dynamoDB.put({
+                    //ConditionExpression: `attribute_exists(pk)`,
+                    TableName: 'CrossAccount-DeveloperBuildReplication',
+                    Item: {
+                      id: id,
+                      bucketName: message.ResourceProperties.BucketName,
+                      accountId: message.ResourceProperties.AccountId,
+                      region: message.ResourceProperties.Region
+                    }
+                  }).promise();
+                }
+                else if (message.RequestType === 'Delete') {
+                  await dynamoDB.delete({
+                    TableName: 'CrossAccount-DeveloperBuildReplication',
+                    Key: {
+                      id: id
+                    }
+                  }).promise();
+                }
+                else {
+                  await send(message, context, 'FAILED', id, `Unknown RequestType '${message.RequestType}'`);
+                }
+
+                await send(message, context, 'SUCCESS', id);
+              }
+              catch (e) {
+                console.error(e);
+                await send(message, context, 'FAILED', id, 'Error registering');
+              }
             }
           };
+
+          async function send(event, context, responseStatus, physicalResourceId, reason) {
+              const responseBody = JSON.stringify({
+                  Status: responseStatus,
+                  Reason: reason,
+                  PhysicalResourceId: physicalResourceId,
+                  StackId: event.StackId,
+                  RequestId: event.RequestId,
+                  LogicalResourceId: event.LogicalResourceId,
+                  NoEcho: false
+              });
+
+              console.log("Response body:\n", responseBody);
+
+              var https = require("https");
+              var url = require("url");
+
+              var parsedUrl = url.parse(event.ResponseURL);
+              var options = {
+                  hostname: parsedUrl.hostname,
+                  port: 443,
+                  path: parsedUrl.path,
+                  method: "PUT",
+                  headers: {
+                      "content-type": "",
+                      "content-length": responseBody.length
+                  }
+              };
+
+              return new Promise(function(resolve, reject) {
+                  var req = https.request(options, function(res) {
+                      // reject on bad status
+                      if (res.statusCode < 200 || res.statusCode >= 300) {
+                          return reject(new Error('statusCode=' + res.statusCode));
+                      }
+                  });
+                  // reject on request error
+                  req.on('error', function(err) {
+                      // This is not a "Second reject", just a different sort of failure
+                      reject(err);
+                  });
+
+                  req.write(responseBody);
+                  // IMPORTANT
+                  req.end();
+              });
+          }
+
       Description: Registers a bucket in a developer account for replication
-      FunctionName: CrossAccountReplicationRegistration
+      FunctionName: CrossAccount-DeveloperBuildReplicationRegistration
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt ReplicationRegistrationRole.Arn
-      Runtime: nodejs10.x
+      Runtime: nodejs12.x
       Timeout: 30
 
-  # Role for the replication function to be called by the CloudFormationCustomResourceServiceSnsTopic.
-  ReplicationRegistrationInvokeRole:
-    Type: 'AWS::IAM::Role'
+  # topic to use as the endpoint for custom resources to register for replication
+  ReplicationRegistrationTopic:
+    Type: AWS::SNS::Topic
     Properties:
-      RoleName: ReplicationRegistrationInvokeRole
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
+      Subscription:
+        - Endpoint: !GetAtt ReplicationRegistrationFunction.Arn
+          Protocol: lambda
+      TopicName: BuildArtifactReplicationRegistration
+
+  # This policy allows any account within the developer org to call the SNS topic
+  ReplicationRegistrationTopicPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Properties:
+      Topics:
+        - !Ref ReplicationRegistrationTopic
+      PolicyDocument:
+        Version: 2012-10-17
         Statement:
           - Effect: Allow
-            Principal:
-              AWS: arn:aws:iam::471161320350:role/CloudFormation-CustomResourceService-CallEndpoint-us-west-2
-            Action: 'sts:AssumeRole'
-            # Condition:
-            #   ArnLike:
-            #     aws:PrincipalArn: !Ref CustomResourceServiceSnsTopicArn
-      ManagedPolicyArns:
-        - !Ref ReplicationRegistrationInvokePolicy
-
-  # This policy allows the replication function to read data from the build bucket.
-  ReplicationRegistrationInvokePolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
-    Properties:
-      ManagedPolicyName: ReplicationRegistrationInvokePolicy
-      Description: Policy for invoking the registration function
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action:
-              - 'lambda:InvokeFunction'
-            Effect: Allow
-            Resource: !GetAtt ReplicationRegistrationFunction.Arn
-
-  # # topic to use as the endpoint for custom resources to register for replication
-  # ReplicationRegistrationTopic:
-  #   Type: AWS::SNS::Topic
-  #   Properties:
-  #     Subscription:
-  #       - Endpoint: !GetAtt ReplicationRegistrationFunction.Arn
-  #         Protocol: lambda
-  #     TopicName: BuildArtifactReplicationRegistration
-
-  # # This policy allows any account within the developer org to call the SNS topic
-  # ReplicationRegistrationTopicPolicy:
-  #   Type: AWS::SNS::TopicPolicy
-  #   Properties:
-  #     Topics:
-  #       - !Ref ReplicationRegistrationTopic
-  #     PolicyDocument:
-  #       Version: 2012-10-17
-  #       Statement:
-  #         - Effect: Allow
-  #           Principal: '*'
-  #           Action:
-  #             - sns:Publish
-  #           Resource: !Ref ReplicationRegistrationTopic
-  #           Condition:
-  #             ArnLike:
-  #               aws:PrincipalArn: arn:aws:iam::*:role/CrossAccount-CloudFormation
-  #             ForAnyValue:StringLike:
-  #               aws:PrincipalOrgPaths:
-  #                 - !Ref DeveloperOrgPath
+            Principal: '*'
+            Action:
+              - sns:Publish
+            Resource: !Ref ReplicationRegistrationTopic
+            Condition:
+              ForAnyValue:StringLike:
+                aws:PrincipalOrgPaths:
+                  - !Ref DeveloperOrgPath
 
   # permission for the SNS topic to call the lambda function
-  # LambdaInvokePermission:
-  #   Type: AWS::Lambda::Permission
-  #   Properties:
-  #     Action: lambda:InvokeFunction
-  #     Principal: sns.amazonaws.com
-  #     SourceArn: !Ref ReplicationRegistrationTopic
-  #     FunctionName: !GetAtt ReplicationRegistrationFunction.Arn
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref ReplicationRegistrationTopic
+      FunctionName: !GetAtt ReplicationRegistrationFunction.Arn
 
   # Role for the replication function.
   ReplicationRole:
     Type: 'AWS::IAM::Role'
     Properties:
-      RoleName: CrossAccountPipelineS3Replication
+      RoleName: CrossAccount-PipelineS3Replication
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -238,13 +228,12 @@ Resources:
             Action: 'sts:AssumeRole'
       ManagedPolicyArns:
         - !Ref ReplicationPolicy
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
 
   # This policy allows the replication function to read data from the build bucket.
   ReplicationPolicy:
     Type: 'AWS::IAM::ManagedPolicy'
     Properties:
-      ManagedPolicyName: CrossAccountPipelineS3Replication
+      ManagedPolicyName: CrossAccount-PipelineS3Replication
       Description: Policy for replicating S3 data for developer account pipelines
       PolicyDocument:
         Version: '2012-10-17'
@@ -268,12 +257,34 @@ Resources:
             Effect: Allow
             Resource: !ImportValue CrossAccountCMK
           - Action:
-              - 'dynamodb:Query'
+              - 'dynamodb:Scan'
             Effect: Allow
             Resource:
-              - 'Fn::Sub':
-                  - '${Arn}/index/*'
-                  - Arn: !GetAtt Table.Arn
+              - !GetAtt Table.Arn
+          - Action:
+              - kms:Encrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Effect: Allow
+            NotResource: !Sub 'arn:aws:kms:*:${AWS::AccountId}:*' # nothing in this account
+          - Action:
+              - s3:PutObject*
+            Effect: Allow
+            Resource: 'arn:aws:s3:::*-buildbucket-*'
+          - Effect: Allow
+            Action:
+              - 'logs:CreateLogStream'
+              - 'logs:PutLogEvents'
+            Resource:
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-DeveloperBuildReplication'
+              - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-DeveloperBuildReplication:*'
+
+  ReplicationLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: /aws/lambda/CrossAccount-DeveloperBuildReplication
+      RetentionInDays: 3
 
   # This function is triggered on created objects in the build bucket and copies the objects to
   # the developer accounts.
@@ -282,24 +293,23 @@ Resources:
     Properties:
       Code:
         ZipFile: |
-          // Modify this function to get the bucket list from the above DynamoDB table
           const AWS = require('aws-sdk')
           const s3 = new AWS.S3({ region: 'us-east-1' });
           const dynamoDB = new AWS.DynamoDB.DocumentClient();
 
           exports.handler = async function main(event, context) {
-            const destBuckets = await getDestinationBuckets();
-
             if (event.Records === null) {
               context.fail('Error: Event has no records.');
               return;
             }
 
+            const destBuckets = await getDestinationBuckets();
+
             // Make a task for each combination of record and destBucket
             let tasks = [];
             for (let i = 0; i < event.Records.length; i++) {
               for (let j = 0; j < destBuckets.length; j++) {
-                tasks.push(replicatePromise(event.Records[i], destBuckets[j]));
+                tasks.push(replicate(event.Records[i], destBuckets[j]));
               }
             }
 
@@ -308,57 +318,43 @@ Resources:
 
           async function getDestinationBuckets() {
             const input = {
-              TableName: 'CrossAccountBuildReplication',
-              IndexName: 'gsi1',
-              KeyConditionExpressions: '#pk = :pk AND begins_with(#sk, :begins)',
-              ExpressionAttributeName: {
-                '#pk': 'gsi1_pk',
-                '#sk': 'gsi1_sk'
-              },
-              ExpressionAttributeValues: {
-                ':pk': 'ReplicateBuildArtifact',
-                ':begins': 'Bucket|'
-              }
+              TableName: 'CrossAccount-DeveloperBuildReplication'
             };
 
-            const output = await dynamoDB.query(input).promise();
+            let items = [];
+            do {
+              const result = await dynamoDB.scan(input).promise();
+              if (result.Items) {
+                items = items.concat(result.Items);
+              }
 
-            return output.Items.map(i => i.bucketArn);
+              input.ExclusiveStartKey = result.LastEvaluatedKey;
+            } while (!!input.ExclusiveStartKey);
+
+            return items;
           }
 
-          function replicatePromise(record, destBucket) {
-            return new Promise((resolve, reject) => {
-              // The source bucket and source key are part of the event data
-              var srcBucket = record.s3.bucket.name;
-              var srcKey = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
-              var srcVersion = record.s3.object.version;
+          async function replicate(record, destBucket) {
+            // The source bucket and source key are part of the event data
+            var srcBucket = record.s3.bucket.name;
+            var srcKey = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
+            var srcVersion = record.s3.object.version;
 
-              // Modify destKey if an alternate copy location is preferred
-              var destKey = srcKey;
-              var msg = 'copying ' + srcBucket + ':' + srcKey + ' to ' + destBucket + ':' + destKey;
+            // Modify destKey if an alternate copy location is preferred
+            var destKey = srcKey;
+            var msg = 'copying ' + srcBucket + ':' + srcKey + ' to ' + destBucket.bucketName + ':' + destKey;
 
-              console.log('Attempting: ' + msg);
-              s3.copyObject({
-                Bucket: destBucket,
-                Key: destKey,
-                ACL: 'bucket-owner-full-control',
-                CopySource: encodeURIComponent(srcBucket + '/' + srcKey + (srcVersion ? ('?versionId=' + srcVersion) : '')),
-                MetadataDirective: 'COPY'
-              }, (err, data) => {
-                if (err) {
-                  console.log('Error:' + msg);
-                  console.log(err, err.stack); // an error occurred
-                  return reject('Error:' + msg);
-                }
-                else {
-                  console.log('Success: ' + msg);
-                  return resolve('Success: ' + msg);
-                }
-              });
-            });
+            console.log('Attempting: ' + msg);
+            return s3.copyObject({
+              Bucket: destBucket.bucketName,
+              Key: destKey,
+              ACL: 'bucket-owner-full-control',
+              CopySource: encodeURIComponent(srcBucket + '/' + srcKey + (srcVersion ? ('?versionId=' + srcVersion) : '')),
+              MetadataDirective: 'COPY'
+            }).promise();
           }
-      Description: Copies data from on S3 bucket to a list of destination buckets.
-      FunctionName: S3DataReplicator
+      Description: Copies data from the build bucket to the developer account build buckets
+      FunctionName: CrossAccount-DeveloperBuildReplication
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt ReplicationRole.Arn
@@ -498,26 +494,11 @@ Resources:
       NotificationId: S3ObjectCreatedEvent
 
 Outputs:
-  ReplicationFunctionArn:
-    Description: The function for replication build artifacts
-    Value: !GetAtt ReplicationFunction.Arn
-    Export:
-      Name: ReplicationFunctionArn
   ReplicationRoleArn:
     Description: The role used for replication.
     Value: !GetAtt ReplicationRole.Arn
-  ApplyBucketNotificationFunctionArn:
-    Description: The ARN of the function to apply a bucket notification to the build bucket
-    Value: !GetAtt ApplyBucketNotificationFunction.Arn
+  ReplicationRegistrationTopicArn:
+    Description: The ARN of the SNS topic that is used as the 'ServiceToken' of the custom resources
+    Value: !Ref ReplicationRegistrationTopic
     Export:
-      Name: ApplyBucketNotificationFunctionArn
-  # ReplicationRegistrationTopicArn:
-  #   Description: The ARN of the SNS topic that is used as the 'ServiceToken' of the custom resources
-  #   Value: !Ref ReplicationRegistrationTopic
-  #   Export:
-  #     Name: ReplicationRegistrationTopicArn
-  ReplicationRegistrationInvokeRoleArn:
-    Description: The role ARN for the registration call
-    Value: !GetAtt ReplicationRegistrationInvokeRole.Arn
-    Export:
-      Name: ReplicationRegistrationInvokeRoleArn
+      Name: ReplicationRegistrationTopicArn

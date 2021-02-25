@@ -38,6 +38,7 @@ Resources:
             Effect: Allow
             Principal:
               Service: codebuild.amazonaws.com
+      Path: /cross-account-service-role/
       ManagedPolicyArns:
         - !Ref CodeBuildPolicy
   CodeBuildPolicy:
@@ -66,6 +67,7 @@ Resources:
                   - 'arn:aws:s3:::${Bucket}/*'
                   - Bucket: !ImportValue BuildBucket
             Effect: Allow
+      Path: /cross-account-service-role/
   CodeBuildProject:
     Type: 'AWS::CodeBuild::Project'
     Properties:
@@ -86,7 +88,7 @@ Resources:
           Name: ExampleProject.LambdaFunction-Test.zip # it is important that this name is NOT the same as the other build because that one will be used in a deploy
           OverrideArtifactName: false
           Path: ExampleProject/LambdaFunction
-      ServiceRole: !Ref CodeBuildRole
+      ServiceRole: !GetAtt CodeBuildRole.Arn
       Environment:
         Type: LINUX_CONTAINER
         Image: 'aws/codebuild/dot-net:core-2.1'
@@ -121,7 +123,7 @@ Resources:
           Name: ExampleProject.LambdaFunction.zip
           OverrideArtifactName: false
           Path: ExampleProject/LambdaFunction
-      ServiceRole: !Ref CodeBuildRole
+      ServiceRole: !GetAtt CodeBuildRole.Arn
       Environment:
         Type: LINUX_CONTAINER
         Image: 'aws/codebuild/dot-net:core-2.1'

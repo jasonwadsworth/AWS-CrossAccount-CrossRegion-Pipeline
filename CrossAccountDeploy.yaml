@@ -22,6 +22,10 @@ Conditions:
       - Fn::Equals:
           - ''
           - !Ref SecondaryPipelineBucket
+  IsBuildAccount:
+    Fn::Equals:
+      - !Ref BuildAccount
+      - !Ref AWS::AccountId
 Resources:
   # this policy grant general permissions to work with cross account stacks pipelines.
   # specifically, it grants access to the source pipeline S3 buckets, and the KMS keys used by those buckets, as well as all CloudFormation permissions
@@ -133,6 +137,10 @@ Resources:
       PolicyName: CrossAccount-CloudFormation-PolicyBuilder
       Roles:
         - !Ref CrossAccountCloudFormationPolicyBuilderRole
+        - Fn::If:
+            - IsBuildAccount
+            - CrossAccount-CloudFormation
+            - !Ref AWS::NoValue
 
   CrossAccountCodePipelineRole:
     Type: AWS::IAM::Role
@@ -187,12 +195,12 @@ Resources:
               - sts:AssumeRole
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
+              - !Sub arn:aws:iam::*:role/cross-account-service-role/*
           - Action:
               - iam:PassRole
             Effect: Allow
             Resource:
-              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
+              - !Sub arn:aws:iam::*:role/cross-account-service-role/*
       PolicyName: CrossAccount-CodePipeline
       Roles:
         - !Ref CrossAccountCodePipelineRole

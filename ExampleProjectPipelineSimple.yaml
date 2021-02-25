@@ -21,12 +21,22 @@ Parameters:
   SecondaryCrossAccountCMK:
     Description: The secondary region's Cross Account CMK. This value is required if you are using a secondary region.
     Type: String
+  DeveloperAccount:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: true
 Conditions:
   HasSecondaryRegion:
     Fn::Not:
       - Fn::Equals:
           - ''
           - !Ref SecondaryRegion
+  IsDeveloperAccount:
+    Fn::Equals:
+      - true
+      - !Ref DeveloperAccount
 Resources:
   CodeBuildRole:
     Type: 'AWS::IAM::Role'
@@ -95,7 +105,11 @@ Resources:
         PrivilegedMode: true
         ComputeType: BUILD_GENERAL1_SMALL
       Triggers:
-        Webhook: true
+        Webhook:
+          Fn::If:
+            - IsDeveloperAccount
+            - false
+            - true
       Source:
         Auth:
           Type: OAUTH
@@ -130,12 +144,19 @@ Resources:
         PrivilegedMode: true
         ComputeType: BUILD_GENERAL1_SMALL
       Triggers:
-        Webhook: true
+        Webhook:
+          Fn::If:
+            - IsDeveloperAccount
+            - false
+            - true
         FilterGroups:
-          - - Type: EVENT
-              Pattern: PUSH
-            - Type: HEAD_REF
-              Pattern: ^refs/heads/master$
+          Fn::If:
+            - IsDeveloperAccount
+            - !Ref AWS::NoValue
+            - - Type: EVENT
+                Pattern: PUSH
+              - Type: HEAD_REF
+                Pattern: ^refs/heads/master$
       Source:
         Auth:
           Type: OAUTH
@@ -220,7 +241,8 @@ Resources:
                     "ProdAccount": "${ProdAccount}",
                     "SecondaryRegion": "${SecondaryRegion}",
                     "SecondaryPipelineBucket": "${SecondaryPipelineBucket}",
-                    "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}"
+                    "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}",
+                    "DeveloperAccount": "${DeveloperAccount}"
                   }
                 RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CloudFormation'
               InputArtifacts:

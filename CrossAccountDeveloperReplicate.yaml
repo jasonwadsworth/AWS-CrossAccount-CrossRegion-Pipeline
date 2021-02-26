@@ -406,6 +406,12 @@ Resources:
                       - 'arn:aws:s3:::${Bucket}/*'
                       - Bucket: !ImportValue BuildBucket
 
+  ApplyBucketNotificationLogGroup:
+    Type: 'AWS::Logs::LogGroup'
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${ApplyBucketNotificationFunction}
+      RetentionInDays: 3
+
   # This function is for adding a bucket notification to the build bucket. This is a custom
   # resource because bucket notification is part of the bucket definition, which we don't control
   # here, so we need to add it via an API call instead. It is only called during deployment of this

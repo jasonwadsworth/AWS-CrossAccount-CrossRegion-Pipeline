@@ -83,6 +83,13 @@ Resources:
               - !Sub arn:aws:s3:::${BuildBucket}
               - !Sub arn:aws:s3:::${BuildBucket}/*
             Effect: Allow
+
+            # TODO: how best to handle things like this?
+          - Action:
+              - secretsmanager:GetSecretValue
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:github-access-token
       Path: /cross-account-service-role/
 
   CrossAccountUpdatePipelineRole:

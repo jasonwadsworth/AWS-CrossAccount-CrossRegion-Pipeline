@@ -61,7 +61,7 @@ Resources:
               stages.splice(stageIndex, 1)
 
               for (var i = 0; i < accounts.length; i++) {
-                const stage = JSON.parse(stageString.replace(/{ACCOUNT_ID}/g, accounts[i]).replace(/{REGION}/g, regions[i]));
+                const stage = JSON.parse(stageString.replace(/{ACCOUNT_ID}/g, accounts[i]).replace(/{REGION}/g, regions[i]).replace(/{NAME}/g, names[i]));
                 stage.Name = event.params.DuplicateNameFormat.replace(/{NAME}/g, names[i]);
                 stages.splice(stageIndex + i, 0, stage);
               }

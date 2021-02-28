@@ -133,6 +133,7 @@ Resources:
               - iam:SetDefaultPolicyVersion
               - iam:TagRole
               - iam:UntagRole
+              - iam:UpdateAssumeRolePolicy
               - iam:UpdateRole
               - iam:UpdateRoleDescription
             Effect: Allow

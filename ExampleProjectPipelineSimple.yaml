@@ -4,14 +4,12 @@ Parameters:
   GitHubUrl:
     Description: The HTTPS URL for GitHub for the project
     Type: String
-  DevRegion:
-    Type: String
-  DevAccount:
-    Type: String
-  ProdRegion:
-    Type: String
-  ProdAccount:
-    Type: String
+  Regions:
+    Type: CommaDelimitedList
+  Accounts:
+    Type: CommaDelimitedList
+  Names:
+    Type: CommaDelimitedList
   SecondaryRegion:
     Description: The secondary region that you deploy to. This value is required if any deployment region is different than the region of this stack.
     Type: String
@@ -138,6 +136,12 @@ Resources:
         Location: !Ref GitHubUrl
         ReportBuildStatus: true
   Pipeline:
+    Fn::Transform:
+      Name: CrossAccount-PipelineHelperMacro
+      Parameters:
+        DuplicateStages:
+          - Deploy
+        DuplicateNameFormat: Deploy-{NAME}
     Type: 'AWS::CodePipeline::Pipeline'
     Properties:
       Name: ExampleProject
@@ -206,18 +210,32 @@ Resources:
                 StackName: ExampleProject-Pipeline
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: 'PrimaryOutput::ExampleProjectPipelineSimple.yaml'
-                ParameterOverrides: !Sub |
-                  {
-                    "GitHubUrl": "${GitHubUrl}",
-                    "DevRegion": "${DevRegion}",
-                    "DevAccount": "${DevAccount}",
-                    "ProdRegion": "${ProdRegion}",
-                    "ProdAccount": "${ProdAccount}",
-                    "SecondaryRegion": "${SecondaryRegion}",
-                    "SecondaryPipelineBucket": "${SecondaryPipelineBucket}",
-                    "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}",
-                    "DeveloperAccount": "${DeveloperAccount}"
-                  }
+                ParameterOverrides:
+                  Fn::Sub:
+                    - |
+                      {
+                        "GitHubUrl": "${GitHubUrl}",
+                        "Regions": "${Regions}",
+                        "Accounts": "${Accounts}",
+                        "Names": "${Names}",
+                        "SecondaryRegion": "${SecondaryRegion}",
+                        "SecondaryPipelineBucket": "${SecondaryPipelineBucket}",
+                        "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}",
+                        "DeveloperAccount": "${DeveloperAccount}"
+                      }
+                    - Accounts:
+                        Fn::Join:
+                          - ','
+                          - !Ref Accounts
+                      Regions:
+                        Fn::Join:
+                          - ','
+                          - !Ref Regions
+                      Names:
+                        Fn::Join:
+                          - ','
+                          - !Ref Names
+
                 RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
               InputArtifacts:
                 - Name: PrimaryOutput
@@ -256,7 +274,7 @@ Resources:
                   RunOrder: 3
                   RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
                 - !Ref AWS::NoValue
-        - Name: Deploy-Dev
+        - Name: Deploy
           Actions:
             - Name: Init-DeployPermissions
               ActionTypeId:
@@ -270,12 +288,12 @@ Resources:
                 StackName: ExampleProject-DeployPermissions
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: 'PrimaryOutput::ExampleProjectDeployPermissions.yaml'
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CloudFormation-PolicyBuilder
+                RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CloudFormation-PolicyBuilder
               InputArtifacts:
                 - Name: PrimaryOutput
-              Region: !Ref DevRegion
+              Region: '{REGION}'
               RunOrder: 1
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
+              RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: Exec-DeployPermissions
               ActionTypeId:
                 Category: Deploy
@@ -287,10 +305,10 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject-DeployPermissions
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CloudFormation-PolicyBuilder
-              Region: !Ref DevRegion
+                RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CloudFormation-PolicyBuilder
+              Region: '{REGION}'
               RunOrder: 2
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
+              RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: CreatePrimaryChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -303,12 +321,12 @@ Resources:
                 StackName: ExampleProject
                 Capabilities: CAPABILITY_NAMED_IAM
                 TemplatePath: 'PrimaryOutput::ExampleProject.yaml'
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
+                RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/ExampleProject-DeployPermissions
               InputArtifacts:
                 - Name: PrimaryOutput
-              Region: !Ref DevRegion
+              Region: '{REGION}'
               RunOrder: 3
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
+              RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: ExecutePrimaryChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -320,10 +338,10 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
-              Region: !Ref DevRegion
+                RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/ExampleProject-DeployPermissions
+              Region: '{REGION}'
               RunOrder: 4
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
+              RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: CreateLambdaChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -351,12 +369,12 @@ Resources:
                       ]
                     }
                   }
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
+                RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/ExampleProject-DeployPermissions
               InputArtifacts:
                 - Name: LambdaOutput
-              Region: !Ref DevRegion
+              Region: '{REGION}'
               RunOrder: 3
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
+              RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CodePipeline
             - Name: ExecuteLambdaChangeSet
               ActionTypeId:
                 Category: Deploy
@@ -368,7 +386,7 @@ Resources:
                 ActionMode: CHANGE_SET_EXECUTE
                 StackName: ExampleProject-LambdaFunction
                 Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/ExampleProject-DeployPermissions
-              Region: !Ref DevRegion
+                RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/ExampleProject-DeployPermissions
+              Region: '{REGION}'
               RunOrder: 4
-              RoleArn: !Sub arn:aws:iam::${DevAccount}:role/cross-account-service-role/CrossAccount-CodePipeline
+              RoleArn: arn:aws:iam::{ACCOUNT_ID}:role/cross-account-service-role/CrossAccount-CodePipeline

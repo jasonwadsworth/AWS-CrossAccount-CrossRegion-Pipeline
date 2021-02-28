@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cross account helper macros
+Resources:
+  # Role for the pipeline helper macro function.
+  PipelineHelperMacroFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CrossAccount-PipelineHelperMacroFunction
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref PipelineHelperMacroFunctionPolicy
+
+  PipelineHelperMacroFunctionPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: CrossAccount-PipelineHelperMacroFunction
+      Description: Policy for cross account pipeline helper macro function
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-PipelineHelperMacroFunction
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-PipelineHelperMacroFunction:*
+
+  PipelineHelperMacroFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/CrossAccount-PipelineHelperMacroFunction
+      RetentionInDays: 3
+
+  PipelineHelperMacroFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk')
+
+          exports.handler = async function main(event, context) {
+            console.info(JSON.stringify(event));
+
+            const accounts = event.templateParameterValues.Accounts;
+            const regions = event.templateParameterValues.Regions;
+            const names = event.templateParameterValues.Names;
+            const fragment = event.fragment;
+            const stages = fragment.Properties.Stages;
+
+            for (const duplicate of event.params.DuplicateStages) {
+              const stageIndex = stages.findIndex(s => s.Name === duplicate);
+              const stageString = JSON.stringify(stages[stageIndex]);
+
+              stages.splice(stageIndex, 1)
+
+              for (var i = 0; i < accounts.length; i++) {
+                const stage = JSON.parse(stageString.replace(/{ACCOUNT_ID}/g, accounts[i]).replace(/{REGION}/g, regions[i]));
+                stage.Name = event.params.DuplicateNameFormat.replace(/{NAME}/g, names[i]);
+                stages.splice(stageIndex + i, 0, stage);
+              }
+            }
+
+            fragment.Properties.Stages = stages;
+
+            console.info(JSON.stringify(fragment));
+
+            return {
+                requestId: event.requestId,
+                status: 'success',
+                fragment: fragment
+            }
+          }
+
+      Description: Replicates a stage of a pipeline for each environment in the list
+      FunctionName: CrossAccount-PipelineHelperMacroFunction
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt PipelineHelperMacroFunctionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 30
+
+  PipelineHelperMacroLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /jasonwadsworth/CrossAccount-PipelineHelperMacro
+      RetentionInDays: 3
+
+  PipelineHelperMacroRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CrossAccount-PipelineHelperMacro
+      Path: /cross-account-service-role/
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Ref PipelineHelperMacroPolicy
+
+  PipelineHelperMacroPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: CrossAccount-PipelineHelperMacro
+      Path: /cross-account-service-role/
+      Description: Policy for cross account pipeline helper macro
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource:
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/jasonwadsworth/CrossAccount-PipelineHelperMacro
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/jasonwadsworth/CrossAccount-PipelineHelperMacro:*
+
+  PipelineHelperMacro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: CrossAccount-PipelineHelperMacro
+      Description: Replicates a stage of a pipeline for each environment in the list
+      FunctionName: !GetAtt PipelineHelperMacroFunction.Arn
+      LogGroupName: /jasonwadsworth/CrossAccount-PipelineHelperMacro
+      LogRoleARN: !GetAtt PipelineHelperMacroRole.Arn
+
+  CrossAccountPipelineHelperMacroInvokePolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      Description: Policy to allow the Cross Account Pipeline Helper Macro to be invoked
+      ManagedPolicyName: CrossAccount-PipelineHelperMacroInvoke
+      Path: /cross-account-service-role/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - lambda:InvokeFunction
+            Effect: Allow
+            Resource:
+              - !GetAtt PipelineHelperMacroFunction.Arn
+      Roles:
+        - CrossAccount-UpdatePipeline

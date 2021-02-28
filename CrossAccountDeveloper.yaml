@@ -139,9 +139,15 @@ Resources:
               - codepipeline:TagResource
               - codepipeline:UntagResource
               - codepipeline:UpdatePipeline
+              - codepipeline:StartPipelineExecution
             Effect: Allow
             Resource:
               - '*'
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
 
   # this is the bucket that will be used for build artifacts, either from local builds or from builds originating in another account
   BuildBucket:

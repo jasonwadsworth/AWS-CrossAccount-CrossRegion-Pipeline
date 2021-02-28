@@ -147,9 +147,15 @@ Resources:
               - codepipeline:TagResource
               - codepipeline:UntagResource
               - codepipeline:UpdatePipeline
+              - codepipeline:StartPipelineExecution
             Effect: Allow
             Resource:
               - '*'
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource:
+              - arn:aws:iam::*:role/cross-account-service-role/*
 
   # Role for the sync artifacts function.
   SyncArtifactsRole:

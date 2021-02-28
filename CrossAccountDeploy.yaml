@@ -98,7 +98,7 @@ Resources:
   # each service, as a part of it's deployment process, should use this policy to grant to create the roles used for it's deployment
   # this allows the developers to control the permissions that they need while giving visibility to changes on a per service bases
   CrossAccountCloudFormationPolicyBuilderPolicy:
-    Type: AWS::IAM::Policy
+    Type: AWS::IAM::ManagedPolicy
     Properties:
       PolicyDocument:
         Version: '2012-10-17'
@@ -139,7 +139,7 @@ Resources:
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
               - !Sub arn:aws:iam::${AWS::AccountId}:policy/cross-account-service-role/*
-      PolicyName: CrossAccount-CloudFormation-PolicyBuilder
+      ManagedPolicyName: CrossAccount-CloudFormation-PolicyBuilder
       Roles:
         - !Ref CrossAccountCloudFormationPolicyBuilderRole
 
@@ -166,7 +166,7 @@ Resources:
   # this policy grants permissions to for code pipeline to be able to perform actions initiated by CodePipeline, including the ability to assume and pass roles for deployment
   # if you need to peform something in CodePipeline that is not in this list it will need to be updated
   CrossAccountCodePipelinePolicy:
-    Type: AWS::IAM::Policy
+    Type: AWS::IAM::ManagedPolicy
     Properties:
       PolicyDocument:
         Version: '2012-10-17'
@@ -202,7 +202,7 @@ Resources:
             Effect: Allow
             Resource:
               - arn:aws:iam::*:role/cross-account-service-role/*
-      PolicyName: CrossAccount-CodePipeline
+      ManagedPolicyName: CrossAccount-CodePipeline
       Roles:
         - !Ref CrossAccountCodePipelineRole
 

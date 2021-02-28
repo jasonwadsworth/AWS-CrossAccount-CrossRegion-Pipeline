@@ -35,7 +35,9 @@ Resources:
                 aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
+                  Fn::Split:
+                    - ','
+                    - !Ref DeploymentOrgPath
   KMSAlias:
     Type: 'AWS::KMS::Alias'
     Properties:
@@ -67,7 +69,9 @@ Resources:
                 aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
               ForAnyValue:StringLike:
                 aws:PrincipalOrgPaths:
-                  - !Ref DeploymentOrgPath
+                  Fn::Split:
+                    - ','
+                    - !Ref DeploymentOrgPath
 
   CrossAccountCodePipelinePolicy:
     Type: 'AWS::IAM::ManagedPolicy'

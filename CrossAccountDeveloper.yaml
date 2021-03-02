@@ -151,6 +151,11 @@ Resources:
             Resource:
               - '*'
           - Action:
+              - logs:*LogGroup
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+          - Action:
               - iam:PassRole
             Effect: Allow
             Resource:

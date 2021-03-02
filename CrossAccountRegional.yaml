@@ -94,28 +94,6 @@ Resources:
       Roles:
         - CrossAccount-CodePipeline
 
-  SyncArtifactsPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
-    Properties:
-      ManagedPolicyName: !Sub CrossAccount-PipelineSyncArtifacts-${AWS::Region}
-      Description: Policy for syncing artifact data for cross account pipelines
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Action:
-              - 'kms:*'
-            Effect: Allow
-            Resource:
-              - !GetAtt KMSKey.Arn
-          - Action:
-              - 's3:*'
-            Effect: Allow
-            Resource:
-              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
-              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
-      Roles:
-        - CrossAccount-PipelineSyncArtifacts
-
 Outputs:
   CMK:
     Description: The CMK that is used for cross account access

@@ -41,6 +41,7 @@ Resources:
       AliasName: alias/codepipeline-crossaccounts
       TargetKeyId: !Ref KMSKey
 
+  # Topic to be used for manual intervention notification in a pipeline.
   ManualInterventionTopic:
     Type: AWS::SNS::Topic
     Properties:
@@ -89,7 +90,7 @@ Resources:
               - secretsmanager:GetSecretValue
             Effect: Allow
             Resource:
-              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:github-access-token
+              - !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:github-access-token-*
       Path: /cross-account-service-role/
 
   CrossAccountUpdatePipelineRole:
@@ -161,10 +162,16 @@ Resources:
             Resource:
               - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
 
-  # this is the bucket that will be used for build artifacts, either from local builds or from builds originating in another account
+  # This is the bucket where build artifacts are put. CodeBuild should place things here, and
+  # CodePipeline should trigger off specific artifacts.
   BuildBucket:
     Type: AWS::S3::Bucket
     Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
       VersioningConfiguration:
         Status: Enabled
       BucketEncryption:
@@ -173,7 +180,7 @@ Resources:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
               SSEAlgorithm: aws:kms
 
-  # This is the bucket that will be used for pipeline artifacts
+  # This is the bucket that is used for CodePipeline, in the primary region
   PipelineBucket:
     Type: AWS::S3::Bucket
     Properties:

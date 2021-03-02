@@ -73,6 +73,14 @@ Resources:
                   - HasSecondaryRegion
                   - !Ref SecondaryCrossAccountCMK
                   - !Ref AWS::NoValue
+          - Fn::If:
+              - IsBuildAccount
+              - Action:
+                  - sns:Publish
+                Effect: Allow
+                Resource:
+                  - !ImportValue ManualInterventionTopicArn
+              - !Ref AWS::NoValue
       Roles:
         - Fn::If:
             - IsBuildAccount

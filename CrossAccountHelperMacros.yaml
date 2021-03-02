@@ -48,9 +48,9 @@ Resources:
           exports.handler = async function main(event, context) {
             console.info(JSON.stringify(event));
 
-            const accounts = event.params.DuplicateAccounts ?? event.templateParameterValues.Accounts;
-            const regions = event.params.DuplicateRegions ?? event.templateParameterValues.Regions;
-            const names = event.params.DuplicateNames ?? event.templateParameterValues.Names;
+            const accounts = event.params.DuplicateAccounts || event.templateParameterValues.Accounts;
+            const regions = event.params.DuplicateRegions || event.templateParameterValues.Regions;
+            const names = event.params.DuplicateNames || event.templateParameterValues.Names;
             const manualApprovalNames = event.params.ManualApprovalNames;
             const approvalNotificationArn = event.params.ApprovalNotificationArn;
 

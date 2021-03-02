@@ -48,9 +48,12 @@ Resources:
           exports.handler = async function main(event, context) {
             console.info(JSON.stringify(event));
 
-            const accounts = event.templateParameterValues.Accounts;
-            const regions = event.templateParameterValues.Regions;
-            const names = event.templateParameterValues.Names;
+            const accounts = event.params.DuplicateAccounts ?? event.templateParameterValues.Accounts;
+            const regions = event.params.DuplicateRegions ?? event.templateParameterValues.Regions;
+            const names = event.params.DuplicateNames ?? event.templateParameterValues.Names;
+            const manualApprovalNames = event.params.ManualApprovalNames;
+            const approvalNotificationArn = event.params.ApprovalNotificationArn;
+
             const fragment = event.fragment;
             const stages = fragment.Properties.Stages;
 
@@ -63,6 +66,27 @@ Resources:
               for (var i = 0; i < accounts.length; i++) {
                 const stage = JSON.parse(stageString.replace(/{ACCOUNT_ID}/g, accounts[i]).replace(/{REGION}/g, regions[i]).replace(/{NAME}/g, names[i]));
                 stage.Name = event.params.DuplicateNameFormat.replace(/{NAME}/g, names[i]);
+
+                // if the manual intervention names list contains the name of the current item then we will inject an approval step
+                if (manualApprovalNames && manualApprovalNames.findIndex(n => n === names[i]) !== -1) {
+                  const approvalAction = {
+                    Name: `${names[i]}-Approval`,
+                    ActionTypeId: {
+                      Category: 'Approval',
+                      Owner: 'AWS',
+                      Provider: 'Manual',
+                      Version: '1'
+                    },
+                    Configuration: {
+                      CustomData: `${fragment.Properties.Name} ${names[i]} Deployment`,
+                      NotificationArn: approvalNotificationArn
+                    },
+                    RunOrder: 1
+                  };
+                  stage.Actions.splice(0, 0, approvalAction);
+
+                }
+
                 stages.splice(stageIndex + i, 0, stage);
               }
             }

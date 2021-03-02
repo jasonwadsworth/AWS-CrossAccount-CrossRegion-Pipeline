@@ -25,6 +25,9 @@ Parameters:
       - true
       - false
     Default: true
+  ManualApprovalNames:
+    Type: CommaDelimitedList
+    Description: The list of names (from the names parameter) that should include a manual approval in the pipeline.
 Conditions:
   HasSecondaryRegion:
     Fn::Not:
@@ -135,10 +138,16 @@ Resources:
         BuildSpec: buildspec.yml
         Location: !Ref GitHubUrl
         ReportBuildStatus: true
+
   Pipeline:
     Fn::Transform:
       Name: CrossAccount-PipelineHelperMacro
       Parameters:
+        DuplicateNames: !Ref Names
+        DuplicateAccounts: !Ref Accounts
+        DuplicateRegions: !Ref Regions
+        ManualApprovalNames: !Ref ManualApprovalNames
+        ApprovalNotificationArn: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:PipelineManualIntervention
         DuplicateStages:
           - Deploy
         DuplicateNameFormat: Deploy-{NAME}
@@ -221,7 +230,8 @@ Resources:
                         "SecondaryRegion": "${SecondaryRegion}",
                         "SecondaryPipelineBucket": "${SecondaryPipelineBucket}",
                         "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}",
-                        "DeveloperAccount": "${DeveloperAccount}"
+                        "DeveloperAccount": "${DeveloperAccount}",
+                        "ManualApprovalNames", "${ManualApprovalNames}"
                       }
                     - Accounts:
                         Fn::Join:
@@ -235,6 +245,10 @@ Resources:
                         Fn::Join:
                           - ','
                           - !Ref Names
+                      ManualApprovalNames:
+                        Fn::Join:
+                          - ','
+                          - !Ref ManualApprovalNames
 
                 RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
               InputArtifacts:

@@ -28,9 +28,7 @@ Resources:
         Version: '2012-10-17'
         Statement:
           - Action:
-              - s3:GetBucketAcl
-              - s3:GetBucketLocation
-              - s3:ListBucket
+              - s3:*Bucket*
             Effect: Allow
             Resource:
               Fn::Split:
@@ -42,9 +40,7 @@ Resources:
                           - ',arn:aws:s3:::'
                           - !Ref PipelineBuckets
           - Action:
-              - s3:GetObject
-              - s3:GetObjectVersion
-              - s3:PutObject
+              - s3:*Object*
             Effect: Allow
             Resource:
               Fn::Split:

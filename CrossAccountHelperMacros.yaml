@@ -87,7 +87,7 @@ Resources:
 
               for (var i = 0; i < accounts.length; i++) {
                 const stage = JSON.parse(stageString.replace(/{ACCOUNT_ID}/g, accounts[i]).replace(/{REGION}/g, regions[i]).replace(/{NAME}/g, names[i]));
-                stage.Name = `${stage.Name} ${names[i]}`;
+                stage.Name = `${stage.Name}-${names[i]}`;
 
                 // if the manual intervention names list contains the name of the current item then we will inject an approval step
                 if (manualApprovalNames && manualApprovalNames.findIndex(n => n === names[i]) !== -1) {

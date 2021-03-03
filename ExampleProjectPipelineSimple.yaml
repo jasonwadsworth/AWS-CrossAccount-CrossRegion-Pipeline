@@ -172,9 +172,9 @@ Resources:
     Fn::Transform:
       Name: CrossAccount-PipelineHelperMacro
       Parameters:
-        DuplicateNames: !Ref Names
-        DuplicateAccounts: !Ref Accounts
-        DuplicateRegions: !Ref Regions
+        Names: !Ref Names
+        Accounts: !Ref Accounts
+        Regions: !Ref Regions
         ArtifactBuckets: !Ref ArtifactBuckets
         ArtifactKMSKeys: !Ref ArtifactKMSKeys
         ArtifactRegions: !Ref ArtifactRegions
@@ -182,7 +182,6 @@ Resources:
         ApprovalNotificationArn: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:PipelineManualIntervention
         DuplicateStages:
           - Deploy
-        DuplicateNameFormat: Deploy-{NAME}
     Type: AWS::CodePipeline::Pipeline
     Properties:
       Name: ExampleProject

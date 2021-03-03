@@ -40,10 +40,8 @@ Create a stack using `CrossAccountPrimary.yaml`. This should be run in the build
 Once the primary stack is completed you will need to create a stack using `CrossAccountDeploy.yaml` in the build account. These are the paramters:
 
 - _BuildAccount_ - set this value to the AWS Account ID of the build account
-- _BuildAccountKMSKeyArn_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountPrimary` stack.
-- _PipelineBucket_ - set this value to the `PipelineBucket` export value from the `CrossAccountPrimary` stack
-- _SecondaryPipelineBucket_ - not used in the build account
-- _SecondaryCrossAccountCMK_ - not used in the build account
+- _BuildAccountKMSKeyArns_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountPrimary` stack.
+- _PipelineBuckets_ - set this value to the `PipelineBucket` export value from the `CrossAccountPrimary` stack
 
 
 ## Cross Region
@@ -59,13 +57,45 @@ Create a stack using `CrossAccountRegional.yaml` in the build account, in the re
 Once the primary stack, and any regional stacks, are completed you will need to create a stack using `CrossAccountDeploy.yaml` in each of the accounts to which you wish to deploy (StackSets are a great way to do this, as all the values are the same). This stack can be created in any region because it only creates IAM resources, which are global. `us-east-1` is recommended. These are the paramters:
 
 - _BuildAccount_ - set this value to the AWS Account ID of the build account
-- _BuildAccountKMSKeyArn_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountPrimary` stack.
-- _PipelineBucket_ - set this value to the `PipelineBucket` export value from the `CrossAccountPrimary` stack
-- _SecondaryPipelineBucket_ - (optional) if you have a secondary region you are deploying to set this to the `CrossAccountCMK` export value from the `CrossAccountRegional` stack for your secondary region.
-- _SecondaryCrossAccountCMK_ - (optional) if you have a secondary region you are deploying to set this to the `PipelineBucket` export value from the `CrossAccountRegional` stack for your secondary region.
+- _BuildAccountKMSKeyArns_ - set this value to a comma separated list of the `CrossAccountCMK` export value from the `CrossAccountPrimary` stack, followed by the `CrossAccountCMK` export value from each of the `CrossAccountRegional` stacks.
+- _PipelineBuckets_ - set this value to a comma separated list of the `PipelineBucket` export value from the `CrossAccountPrimary` stack, followed by the `PipelineBucket` export value from each of the `CrossAccountRegional` stack
 
-> NOTE: currently the `CrossAccountDeploy.yaml` only supports a two region deployment. I hope to expand upon that soon.
+## Helper Macros
 
+In order to make building your pipelines a little easier I've included a macro function that will take care of duplicating stages as well as taking care of the artificts stores. To use the macro you'll need to create a stack using `CrossAccountHelperMacros.yaml` in the account and region of the pipelines (the primary region).
+
+To use the macro you add the following to your pipeline resource (see `ExampleProjectPipelineSimple.yaml` for an example):
+
+```
+    Fn::Transform:
+      Name: CrossAccount-PipelineHelperMacro
+      Parameters:
+        Names:
+            - String
+        Accounts:
+            - String
+        Regions:
+            - String
+        ArtifactBuckets:
+            - String
+        ArtifactKMSKeys:
+            - String
+        ManualApprovalNames:
+            - String
+        ApprovalNotificationArn: String
+        DuplicateStages:
+            - String
+```
+
+- _Names_: Array of names to use when duplicating. This value can be omitted if you have a stack parameter by the same name.
+- _Accounts_: Array of accounts to use when duplicating. This value can be omitted if you have a stack parameter by the same name. The order and length of the accounts must match that of the names.
+- _Regions_: Array of regions to use when duplicating. This value can be omitted if you have a stack parameter by the same name. The order and length of the regions must match that of the names. If you are deploying multiple times to the same region the region should be included multiple times.
+- _ArtifactBuckets_: Array of artifact buckets. This value can be omitted if you have a stack parameter by the same name. The order of the buckets must match the order of the artifact regions.
+- _ArtifactKMSKeys_: Array of artifact KMS key ARNs. This value can be omitted if you have a stack parameter by the same name. The order of the ARNs must match the order of the artifact regions.
+- _ArtifactRegions_: Array of artifact buckets. This value can be omitted if you have a stack parameter by the same name.
+- _ManualApprovalNames_: Array of the names (from the duplicate names above) that should have a manual approval action added.
+- _ApprovalNotificationArn_: The ARN of the approval SNS topic.
+- _DuplicateStages_: Array of the stages to duplicate. Each stage in the array will result in one stage for each name above.
 
 That is all that is needed to create a pipeline that is cross account/cross region. For an example pipeline that uses the values above please look at the `ExampleProjectPipelineSimple.yaml`.
 
@@ -89,10 +119,8 @@ Once that is done you can create a stack using `CrossAccountDeveloper.yaml` in a
 Once your developer stack is done you'll need to create a stack using `CrossAccountDeploy.yaml`. This is the same stack you used above, for deploying to your different accounts. It has the following parmeters:
 
 - _BuildAccount_ - set this value to the AWS Account ID of the DEVELOPER account. Your developer account will be a build account just for you
-- _BuildAccountKMSKeyArn_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountDeveloper` stack.
-- _PipelineBucket_ - set this value to the `PipelineBucket` export value from the `CrossAccountDeveloper` stack
-- _SecondaryPipelineBucket_ - not used for developer accounts
-- _SecondaryCrossAccountCMK_ - not used for developer accounts
+- _BuildAccountKMSKeyArns_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountDeveloper` stack.
+- _PipelineBuckets_ - set this value to the `PipelineBucket` export value from the `CrossAccountDeveloper` stack
 
 
 Once this is done you will have a bucket that gets data both from your account's builds and the "real" build account's builds. This will keep your account in sync at all times, while allowing you to test on a private branches.

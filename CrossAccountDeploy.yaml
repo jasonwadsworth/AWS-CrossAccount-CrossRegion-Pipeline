@@ -4,24 +4,13 @@ Parameters:
   BuildAccount:
     Description: AWS AccountNumber for the Build Account
     Type: Number
-  BuildAccountKMSKeyArn:
-    Description: The ARN of the KMS key used in the pipeline S3 bucket(s)
-    Type: String
-  PipelineBucket:
-    Description: The bucket used for the pipelines.
-    Type: String
-  SecondaryPipelineBucket:
-    Description: The secondary region's Pipeline bucket. This value is required if you are using a secondary region.
-    Type: String
-  SecondaryCrossAccountCMK:
-    Description: The secondary region's Cross Account CMK. This value is required if you are using a secondary region.
-    Type: String
+  BuildAccountKMSKeyArns:
+    Description: The ARN of the KMS keys used in the pipeline S3 bucket(s)
+    Type: CommaDelimitedList
+  PipelineBuckets:
+    Description: The buckets used for the pipelines.
+    Type: CommaDelimitedList
 Conditions:
-  HasSecondaryRegion:
-    Fn::Not:
-      - Fn::Equals:
-          - ''
-          - !Ref SecondaryPipelineBucket
   IsBuildAccount:
     Fn::Equals:
       - !Ref BuildAccount
@@ -41,22 +30,33 @@ Resources:
           - Action:
               - s3:GetBucketAcl
               - s3:GetBucketLocation
+              - s3:ListBucket
+            Effect: Allow
+            Resource:
+              Fn::Split:
+                - ','
+                - Fn::Join:
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - Fn::Join:
+                          - ',arn:aws:s3:::'
+                          - !Ref PipelineBuckets
+          - Action:
               - s3:GetObject
               - s3:GetObjectVersion
-              - s3:ListBucket
               - s3:PutObject
             Effect: Allow
             Resource:
-              - !Sub arn:aws:s3:::${PipelineBucket}
-              - !Sub arn:aws:s3:::${PipelineBucket}/*
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}
-                  - !Ref AWS::NoValue
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Sub arn:aws:s3:::${SecondaryPipelineBucket}/*
-                  - !Ref AWS::NoValue
+              Fn::Split:
+                - ','
+                - Fn::Join:
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - Fn::Join:
+                          - '/*,arn:aws:s3:::'
+                          - !Ref PipelineBuckets
+                      - '/*'
+
           - Action: cloudformation:*
             Effect: Allow
             Resource: '*'
@@ -67,12 +67,7 @@ Resources:
               - kms:ReEncrypt*
               - kms:GenerateDataKey*
               - kms:DescribeKey
-            Resource:
-              - !Ref BuildAccountKMSKeyArn
-              - Fn::If:
-                  - HasSecondaryRegion
-                  - !Ref SecondaryCrossAccountCMK
-                  - !Ref AWS::NoValue
+            Resource: !Ref BuildAccountKMSKeyArns
           - Fn::If:
               - IsBuildAccount
               - Action:

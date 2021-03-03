@@ -1,39 +1,62 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Continuous integration project for ExampleProject
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Deployment information
+        Parameters:
+          - Names
+          - Accounts
+          - Regions
+      - Label:
+          default: Source information
+        Parameters:
+          - GitHubUrl
+      - Label:
+          default: Artifact information
+        Parameters:
+          - ArtifactRegions
+          - ArtifactBuckets
+          - ArtifactKMSKeys
+      - Label:
+          default: Pipeline information
+        Parameters:
+          - DeveloperAccount
+
 Parameters:
   GitHubUrl:
     Description: The HTTPS URL for GitHub for the project
     Type: String
   Regions:
     Type: CommaDelimitedList
+    Description: The comma separated list of regions to deploy to, ordered to match the deployment names.
   Accounts:
     Type: CommaDelimitedList
+    Description: The comma separated list of accounts to deploy to, ordered to match the deployment names.
   Names:
     Type: CommaDelimitedList
-  SecondaryRegion:
-    Description: The secondary region that you deploy to. This value is required if any deployment region is different than the region of this stack.
-    Type: String
-  SecondaryPipelineBucket:
-    Description: The secondary region's Pipeline bucket. This value is required if you are using a secondary region.
-    Type: String
-  SecondaryCrossAccountCMK:
-    Description: The secondary region's Cross Account CMK. This value is required if you are using a secondary region.
-    Type: String
+    Description: The comma separated list of the names of the deployments, ordered to match the order in which they are to be deployed
+  ArtifactBuckets:
+    Type: CommaDelimitedList
+    Description: The comma separated of artifact buckets, ordered to match the artifact regions.
+  ArtifactKMSKeys:
+    Type: CommaDelimitedList
+    Description: The comma separated of artifact KMS key ARNS, ordered to match the artifact regions.
+  ArtifactRegions:
+    Type: CommaDelimitedList
+    Description: The comma separated of artifact regions.
   DeveloperAccount:
     Type: String
     AllowedValues:
       - true
       - false
     Default: true
+    Description: Is this pipeline for a developer account?
   ManualApprovalNames:
     Type: CommaDelimitedList
-    Description: The list of names (from the names parameter) that should include a manual approval in the pipeline.
+    Description: The comma separated list of names (from the names parameter) that should include a manual approval in the pipeline.
 Conditions:
-  HasSecondaryRegion:
-    Fn::Not:
-      - Fn::Equals:
-          - ''
-          - !Ref SecondaryRegion
   IsDeveloperAccount:
     Fn::Equals:
       - true
@@ -140,40 +163,31 @@ Resources:
         ReportBuildStatus: true
 
   Pipeline:
+    Metadata:
+      cfn-lint:
+        config:
+          ignore_checks:
+            - E3001
+            - E2523
     Fn::Transform:
       Name: CrossAccount-PipelineHelperMacro
       Parameters:
         DuplicateNames: !Ref Names
         DuplicateAccounts: !Ref Accounts
         DuplicateRegions: !Ref Regions
+        ArtifactBuckets: !Ref ArtifactBuckets
+        ArtifactKMSKeys: !Ref ArtifactKMSKeys
+        ArtifactRegions: !Ref ArtifactRegions
         ManualApprovalNames: !Ref ManualApprovalNames
         ApprovalNotificationArn: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:PipelineManualIntervention
         DuplicateStages:
           - Deploy
         DuplicateNameFormat: Deploy-{NAME}
-    Type: 'AWS::CodePipeline::Pipeline'
+    Type: AWS::CodePipeline::Pipeline
     Properties:
       Name: ExampleProject
       RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline
       RestartExecutionOnUpdate: true
-      ArtifactStores:
-        - ArtifactStore:
-            Location: !ImportValue PipelineBucket
-            Type: S3
-            EncryptionKey:
-              Id: !ImportValue CrossAccountCMK
-              Type: KMS
-          Region: !Ref AWS::Region
-        - Fn::If:
-            - HasSecondaryRegion
-            - ArtifactStore:
-                Location: !Ref SecondaryPipelineBucket
-                Type: S3
-                EncryptionKey:
-                  Id: !Ref SecondaryCrossAccountCMK
-                  Type: KMS
-              Region: !Ref SecondaryRegion
-            - !Ref AWS::NoValue
       Stages:
         - Name: Source
           Actions:
@@ -223,33 +237,44 @@ Resources:
                   Fn::Sub:
                     - |
                       {
-                        "GitHubUrl": "${GitHubUrl}",
-                        "Regions": "${Regions}",
                         "Accounts": "${Accounts}",
-                        "Names": "${Names}",
-                        "SecondaryRegion": "${SecondaryRegion}",
-                        "SecondaryPipelineBucket": "${SecondaryPipelineBucket}",
-                        "SecondaryCrossAccountCMK": "${SecondaryCrossAccountCMK}",
+                        "ArtifactBuckets": "${ArtifactBuckets}",
+                        "ArtifactKMSKeys": "${ArtifactKMSKeys}",
+                        "ArtifactRegions": "${ArtifactRegions}",
                         "DeveloperAccount": "${DeveloperAccount}",
-                        "ManualApprovalNames", "${ManualApprovalNames}"
+                        "GitHubUrl": "${GitHubUrl}",
+                        "ManualApprovalNames": "${ManualApprovalNames}",
+                        "Names": "${Names}",
+                        "Regions": "${Regions}"
                       }
                     - Accounts:
                         Fn::Join:
                           - ','
                           - !Ref Accounts
-                      Regions:
+                      ArtifactBuckets:
                         Fn::Join:
                           - ','
-                          - !Ref Regions
-                      Names:
+                          - !Ref ArtifactBuckets
+                      ArtifactKMSKeys:
                         Fn::Join:
                           - ','
-                          - !Ref Names
+                          - !Ref ArtifactKMSKeys
+                      ArtifactRegions:
+                        Fn::Join:
+                          - ','
+                          - !Ref ArtifactRegions
                       ManualApprovalNames:
                         Fn::Join:
                           - ','
                           - !Ref ManualApprovalNames
-
+                      Names:
+                        Fn::Join:
+                          - ','
+                          - !Ref Names
+                      Regions:
+                        Fn::Join:
+                          - ','
+                          - !Ref Regions
                 RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
               InputArtifacts:
                 - Name: PrimaryOutput
@@ -271,23 +296,6 @@ Resources:
               Region: !Ref AWS::Region
               RunOrder: 2
               RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline'
-            - Fn::If:
-                - HasSecondaryRegion
-                - Name: SyncSecondaryArtifacts
-                  ActionTypeId:
-                    Category: Invoke
-                    Owner: AWS
-                    Provider: Lambda
-                    Version: '1'
-                  Configuration:
-                    FunctionName: !ImportValue SyncArtifactsFunction
-                    UserParameters: !Sub '{ "DestinationBucket": "${SecondaryPipelineBucket}" }'
-                  InputArtifacts:
-                    - Name: PrimaryOutput
-                    - Name: LambdaOutput
-                  RunOrder: 3
-                  RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
-                - !Ref AWS::NoValue
         - Name: Deploy
           Actions:
             - Name: Init-DeployPermissions

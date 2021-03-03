@@ -48,14 +48,36 @@ Resources:
           exports.handler = async function main(event, context) {
             console.info(JSON.stringify(event));
 
-            const accounts = event.params.DuplicateAccounts || event.templateParameterValues.Accounts;
-            const regions = event.params.DuplicateRegions || event.templateParameterValues.Regions;
-            const names = event.params.DuplicateNames || event.templateParameterValues.Names;
+            const accounts = event.params.Accounts || event.templateParameterValues.Accounts;
+            const regions = event.params.Regions || event.templateParameterValues.Regions;
+            const names = event.params.Names || event.templateParameterValues.Names;
             const manualApprovalNames = event.params.ManualApprovalNames;
             const approvalNotificationArn = event.params.ApprovalNotificationArn;
+            const artifactBuckets = event.params.ArtifactBuckets || event.templateParameterValues.ArtifactBuckets;
+            const artifactKMSKeys = event.params.ArtifactKMSKeys || event.templateParameterValues.ArtifactKMSKeys;
+            const artifactRegions = event.params.ArtifactRegions || event.templateParameterValues.ArtifactRegions;
 
             const fragment = event.fragment;
             const stages = fragment.Properties.Stages;
+
+            if (artifactRegions) {
+              const artifactStores = [];
+              for (var i = 0; i < artifactRegions.length; i++) {
+                artifactStores.push({
+                  ArtifactStore: {
+                    Location: artifactBuckets[i],
+                    Type: 'S3',
+                    EncryptionKey: {
+                      Id: artifactKMSKeys[i],
+                      Type: 'KMS'
+                    }
+                  },
+                  Region: artifactRegions[i]
+                });
+              }
+
+              fragment.Properties.ArtifactStores = artifactStores;
+            }
 
             for (const duplicate of event.params.DuplicateStages) {
               const stageIndex = stages.findIndex(s => s.Name === duplicate);
@@ -65,7 +87,7 @@ Resources:
 
               for (var i = 0; i < accounts.length; i++) {
                 const stage = JSON.parse(stageString.replace(/{ACCOUNT_ID}/g, accounts[i]).replace(/{REGION}/g, regions[i]).replace(/{NAME}/g, names[i]));
-                stage.Name = event.params.DuplicateNameFormat.replace(/{NAME}/g, names[i]);
+                stage.Name = `${stage.Name} ${names[i]}`;
 
                 // if the manual intervention names list contains the name of the current item then we will inject an approval step
                 if (manualApprovalNames && manualApprovalNames.findIndex(n => n === names[i]) !== -1) {

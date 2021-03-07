@@ -294,3 +294,8 @@ Outputs:
     Value: !Ref PipelineBucket
     Export:
       Name: PipelineBucket
+  ManualInterventionTopicArn:
+    Description: The manual intervetion topic ARN
+    Value: !Ref ManualInterventionTopic
+    Export:
+      Name: ManualInterventionTopicArn

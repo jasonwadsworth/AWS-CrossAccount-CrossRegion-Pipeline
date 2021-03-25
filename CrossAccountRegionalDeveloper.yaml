@@ -1,0 +1,65 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Cross account regional stack.
+Resources:
+  KMSKey:
+    Type: 'AWS::KMS::Key'
+    Properties:
+      Description: Used by Assumed Roles in deploy accounts to Encrypt/Decrypt code
+      EnableKeyRotation: true
+      KeyPolicy:
+        Version: '2012-10-17'
+        Id: !Ref 'AWS::StackName'
+        Statement:
+          - Sid: Allows admin of the key
+            Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - 'kms:*'
+            Resource: '*'
+  KMSAlias:
+    Type: 'AWS::KMS::Alias'
+    Properties:
+      AliasName: alias/codepipeline-crossaccounts
+      TargetKeyId: !Ref KMSKey
+  ArtifactBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !GetAtt KMSKey.Arn
+              SSEAlgorithm: 'aws:kms'
+
+  CrossAccountCodePipelinePolicy:
+    Type: 'AWS::IAM::ManagedPolicy'
+    Properties:
+      ManagedPolicyName: !Sub CrossAccount-CodePipeline-${AWS::Region}
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'kms:*'
+            Resource:
+              - !GetAtt KMSKey.Arn
+          - Action:
+              - 's3:*'
+            Effect: Allow
+            Resource:
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
+              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
+      Roles:
+        - CrossAccount-CodePipeline
+
+Outputs:
+  CMK:
+    Description: The CMK that is used for cross account access
+    Value: !GetAtt KMSKey.Arn
+    Export:
+      Name: CrossAccountCMK
+  PipelineBucket:
+    Description: The bucket for artifacts
+    Value: !Ref ArtifactBucket
+    Export:
+      Name: PipelineBucket

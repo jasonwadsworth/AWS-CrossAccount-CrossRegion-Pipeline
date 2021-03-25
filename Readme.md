@@ -122,6 +122,7 @@ Once your developer stack is done you'll need to create a stack using `CrossAcco
 - _BuildAccountKMSKeyArns_ - set this value to the `CrossAccountCMK` export value from the `CrossAccountDeveloper` stack.
 - _PipelineBuckets_ - set this value to the `PipelineBucket` export value from the `CrossAccountDeveloper` stack
 
+You'll also need to create the macro stack if you are using that. See above for more info.
 
 Once this is done you will have a bucket that gets data both from your account's builds and the "real" build account's builds. This will keep your account in sync at all times, while allowing you to test on a private branches.
 

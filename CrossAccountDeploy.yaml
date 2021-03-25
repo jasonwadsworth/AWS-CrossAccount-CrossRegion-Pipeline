@@ -206,6 +206,61 @@ Resources:
       Roles:
         - !Ref CrossAccountCodePipelineRole
 
+  CrossAccountCreateCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              AWS: !Ref BuildAccount
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: cloudformation.amazonaws.com
+      Description: This role is used for the cross account code pipelines. This role should be used for the pipeline to create CodeBuild projects in the destination accounts (for deploying with CDK or Serverless). It has permissions to work with the artifact buckets, manage CodeBuild project (as needed), as well as assume role to other cross account service roles.
+      ManagedPolicyArns:
+        - !Ref CrossAccountBasePolicy
+      Path: /cross-account-service-role/
+      RoleName: CrossAccount-CreateCodeBuild
+
+  # this policy grants permissions needed to use CodeBuild for deployment (to enable CDK or Serverless, for example). It includes permissions to create the CodeBuild project and to pass and assume the cross account service roles.
+  CrossAccountCreateCodeBuildPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - codebuild:CreateProject
+              - codebuild:DeleteProject
+              - codebuild:InvalidateProjectCache
+              - codebuild:ListProjects
+              - codebuild:PutResourcePolicy
+              - codebuild:UpdateProject
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - logs:*LogGroup
+            Resource:
+              - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Resource:
+              - arn:aws:iam::*:role/cross-account-service-role/*
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource:
+              - arn:aws:iam::*:role/cross-account-service-role/*
+      ManagedPolicyName: CrossAccount-CreateCodeBuild
+      Roles:
+        - !Ref CrossAccountCreateCodeBuildRole
+
 Outputs:
   CrossAccountCloudFormationPolicyBuilderRoleArn:
     Description: The ARN for the cloud formation policy builder role.

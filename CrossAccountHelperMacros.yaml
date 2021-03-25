@@ -79,7 +79,7 @@ Resources:
               fragment.Properties.ArtifactStores = artifactStores;
             }
 
-            for (const duplicate of event.params.DuplicateStages) {
+            for (const duplicate of event.params.DuplicateStages || []) {
               const stageIndex = stages.findIndex(s => s.Name === duplicate);
               const stageString = JSON.stringify(stages[stageIndex]);
 

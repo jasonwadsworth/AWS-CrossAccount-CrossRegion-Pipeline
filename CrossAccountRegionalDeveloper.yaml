@@ -1,8 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: Cross account regional stack.
-Parameters:
-  DeploymentOrgPath:
-    Type: String
 Resources:
   KMSKey:
     Type: 'AWS::KMS::Key'
@@ -20,24 +17,6 @@ Resources:
             Action:
               - 'kms:*'
             Resource: '*'
-          - Effect: Allow
-            Principal:
-              AWS: '*'
-            Action:
-              - 'kms:Encrypt'
-              - 'kms:Decrypt'
-              - 'kms:ReEncrypt*'
-              - 'kms:GenerateDataKey*'
-              - 'kms:DescribeKey'
-            Resource: '*'
-            Condition:
-              ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
-              ForAnyValue:StringLike:
-                aws:PrincipalOrgPaths:
-                  Fn::Split:
-                    - ','
-                    - !Ref DeploymentOrgPath
   KMSAlias:
     Type: 'AWS::KMS::Alias'
     Properties:
@@ -51,27 +30,6 @@ Resources:
           - ServerSideEncryptionByDefault:
               KMSMasterKeyID: !GetAtt KMSKey.Arn
               SSEAlgorithm: 'aws:kms'
-  ArtifactBucketPolicy:
-    Type: 'AWS::S3::BucketPolicy'
-    Properties:
-      Bucket: !Ref ArtifactBucket
-      PolicyDocument:
-        Statement:
-          - Action:
-              - 's3:*'
-            Effect: Allow
-            Resource:
-              - !Sub 'arn:aws:s3:::${ArtifactBucket}'
-              - !Sub 'arn:aws:s3:::${ArtifactBucket}/*'
-            Principal: '*'
-            Condition:
-              ArnLike:
-                aws:PrincipalArn: arn:aws:iam::*:role/cross-account-service-role/*
-              ForAnyValue:StringLike:
-                aws:PrincipalOrgPaths:
-                  Fn::Split:
-                    - ','
-                    - !Ref DeploymentOrgPath
 
   CrossAccountCodePipelinePolicy:
     Type: 'AWS::IAM::ManagedPolicy'

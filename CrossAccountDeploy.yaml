@@ -4,164 +4,267 @@ Parameters:
   BuildAccount:
     Description: AWS AccountNumber for the Build Account
     Type: Number
-  CMKARNs:
-    Description: Comma separated list of ARNs of the KMS CMKs created in the Build Account
-    Type: String
+  BuildAccountKMSKeyArns:
+    Description: The ARN of the KMS keys used in the pipeline S3 bucket(s)
+    Type: CommaDelimitedList
+  PipelineBuckets:
+    Description: The buckets used for the pipelines.
+    Type: CommaDelimitedList
+Conditions:
+  IsBuildAccount:
+    Fn::Equals:
+      - !Ref BuildAccount
+      - !Ref AWS::AccountId
 Resources:
-  CrossAccountCodePipelineRole:
-    Type: 'AWS::IAM::Role'
+  # this policy grant general permissions to work with cross account stacks pipelines.
+  # specifically, it grants access to the source pipeline S3 buckets, and the KMS keys used by those buckets, as well as all CloudFormation permissions
+  CrossAccountBasePolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      RoleName: CrossAccountCodePipeline
+      Description: Policy for Cross Account CloudFormation
+      ManagedPolicyName: CrossAccount-Base
+      Path: /cross-account-service-role/
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - s3:*Bucket*
+            Effect: Allow
+            Resource:
+              Fn::Split:
+                - ','
+                - Fn::Join:
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - Fn::Join:
+                          - ',arn:aws:s3:::'
+                          - !Ref PipelineBuckets
+          - Action:
+              - s3:*Object*
+            Effect: Allow
+            Resource:
+              Fn::Split:
+                - ','
+                - Fn::Join:
+                    - ''
+                    - - 'arn:aws:s3:::'
+                      - Fn::Join:
+                          - '/*,arn:aws:s3:::'
+                          - !Ref PipelineBuckets
+                      - '/*'
+
+          - Action: cloudformation:*
+            Effect: Allow
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+              - kms:DescribeKey
+            Resource: !Ref BuildAccountKMSKeyArns
+          - Fn::If:
+              - IsBuildAccount
+              - Action:
+                  - sns:Publish
+                Effect: Allow
+                Resource:
+                  - !ImportValue ManualInterventionTopicArn
+              - !Ref AWS::NoValue
+      Roles:
+        - Fn::If:
+            - IsBuildAccount
+            - CrossAccount-UpdatePipeline # If we are in the build account we'll need this to allow updates of a pipeline
+            - !Ref AWS::NoValue
+
+  CrossAccountCloudFormationPolicyBuilderRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service: cloudformation.amazonaws.com
+      Description: Role for creating permissions in cross account deployments. This role allows you to create policies with the permissions you need for each service. The role should be given a permission boundary to limit escalation of permissions.
+      ManagedPolicyArns:
+        - !Ref CrossAccountBasePolicy
+      Path: /cross-account-service-role/
+      RoleName: CrossAccount-CloudFormation-PolicyBuilder
+
+  # this policy grants permissions to create and modify policy that will be used to deploy a service
+  # each service, as a part of it's deployment process, should use this policy to grant to create the roles used for it's deployment
+  # this allows the developers to control the permissions that they need while giving visibility to changes on a per service bases
+  CrossAccountCloudFormationPolicyBuilderPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Action:
+              - iam:Get*
+              - iam:List*
+            Effect: Allow
+            Resource:
+              - '*'
+          - Action:
+              - iam:AttachRolePolicy
+              - iam:CreateInstanceProfile
+              - iam:CreatePolicy
+              - iam:CreatePolicyVersion
+              - iam:CreateRole
+              - iam:CreateServiceLinkedRole
+              - iam:DeletePolicy
+              - iam:DeletePolicyVersion
+              - iam:DeleteRole
+              - iam:DeleteServiceLinkedRole
+              - iam:DetachRolePolicy
+              - iam:GetPolicy
+              - iam:GetPolicyVersion
+              - iam:GetRole
+              - iam:ListAttachedRolePolicies
+              - iam:ListEntitiesForPolicy
+              - iam:ListPolicies
+              - iam:ListPolicyVersions
+              - iam:ListRoleTags
+              - iam:ListRoles
+              - iam:SetDefaultPolicyVersion
+              - iam:TagRole
+              - iam:UntagRole
+              - iam:UpdateAssumeRolePolicy
+              - iam:UpdateRole
+              - iam:UpdateRoleDescription
+            Effect: Allow
+            Resource:
+              - !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/*
+              - !Sub arn:aws:iam::${AWS::AccountId}:policy/cross-account-service-role/*
+      ManagedPolicyName: CrossAccount-CloudFormation-PolicyBuilder
+      Roles:
+        - !Ref CrossAccountCloudFormationPolicyBuilderRole
+
+  CrossAccountCodePipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
+            Action: sts:AssumeRole
             Principal:
               AWS: !Ref BuildAccount
-            Action: 'sts:AssumeRole'
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              Service: codepipeline.amazonaws.com
+      Description: This role is used for the cross account code pipelines. This role should be used for the pipeline itself. It has permissions to work with the artifact buckets, perform CodePipeline tasks (add as needed), as well as assume role to other cross account service roles.
       ManagedPolicyArns:
-        - !Ref CrossAccountCodePipelinePolicy
+        - !Ref CrossAccountBasePolicy
+      Path: /cross-account-service-role/
+      RoleName: CrossAccount-CodePipeline
+
+  # this policy grants permissions to for code pipeline to be able to perform actions initiated by CodePipeline, including the ability to assume and pass roles for deployment
+  # if you need to peform something in CodePipeline that is not in this list it will need to be updated
   CrossAccountCodePipelinePolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: CrossAccountCodePipeline
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
           - Effect: Allow
             Action:
-              - 'codebuild:*'
-              - 'cloudformation:*'
-              - 's3:*'
-              - 'iam:PassRole'
-              - 'lambda:invoke*'
+              - codepipeline:*
+              - iam:ListRoles
+              - cloudformation:Describe*
+              - cloudFormation:List*
+              - codebuild:BatchGetBuilds
+              - codebuild:StartBuild
+              - cloudformation:CreateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:UpdateStack
+              - cloudformation:CreateChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:SetStackPolicy
+              - cloudformation:ValidateTemplate
+              - s3:ListAllMyBuckets
+              - s3:GetBucketLocation
             Resource: '*'
-          - Effect: Allow
-            Action: 'kms:*'
-            Resource:
-              'Fn::Split':
-                - ','
-                - !Ref CMKARNs
-  CrossAccountCloudFormationRole:
-    Type: 'AWS::IAM::Role'
-    Properties:
-      RoleName: CrossAccountCloudFormation
-      AssumeRolePolicyDocument:
-        Statement:
-          - Action: 'sts:AssumeRole'
+          - Action:
+              - sts:AssumeRole
             Effect: Allow
+            Resource:
+              - arn:aws:iam::*:role/cross-account-service-role/*
+          - Action:
+              - iam:PassRole
+            Effect: Allow
+            Resource:
+              - arn:aws:iam::*:role/cross-account-service-role/*
+      ManagedPolicyName: CrossAccount-CodePipeline
+      Roles:
+        - !Ref CrossAccountCodePipelineRole
+
+  CrossAccountCreateCodeBuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Principal:
+              AWS: !Ref BuildAccount
+          - Effect: Allow
+            Action: sts:AssumeRole
             Principal:
               Service: cloudformation.amazonaws.com
+      Description: This role is used for the cross account code pipelines. This role should be used for the pipeline to create CodeBuild projects in the destination accounts (for deploying with CDK or Serverless). It has permissions to work with the artifact buckets, manage CodeBuild project (as needed), as well as assume role to other cross account service roles.
       ManagedPolicyArns:
-        - !Ref CrossAccountCloudFormationPolicy
-        - 'arn:aws:iam::aws:policy/AdministratorAccess'
-  CrossAccountCloudFormationPolicy:
-    Type: 'AWS::IAM::ManagedPolicy'
+        - !Ref CrossAccountBasePolicy
+      Path: /cross-account-service-role/
+      RoleName: CrossAccount-CreateCodeBuild
+
+  # this policy grants permissions needed to use CodeBuild for deployment (to enable CDK or Serverless, for example). It includes permissions to create the CodeBuild project and to pass and assume the cross account service roles.
+  CrossAccountCreateCodeBuildPolicy:
+    Type: AWS::IAM::ManagedPolicy
     Properties:
-      #Description: Policy for Cross Account CloudFormation
-      ManagedPolicyName: CrossAccountCloudFormation
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
+          - Effect: Allow
+            Action:
+              - codebuild:CreateProject
+              - codebuild:DeleteProject
+              - codebuild:InvalidateProjectCache
+              - codebuild:ListProjects
+              - codebuild:PutResourcePolicy
+              - codebuild:UpdateProject
+            Resource: '*'
+          - Effect: Allow
+            Action:
+              - logs:*LogGroup
+            Resource:
+              - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
           - Action:
-              - 'dynamodb:CreateTable'
-              - 'dynamodb:DeleteTable'
-              - 'dynamodb:DescribeTable'
-              - 'dynamodb:UpdateTable'
+              - sts:AssumeRole
             Effect: Allow
             Resource:
-              - '*'
+              - arn:aws:iam::*:role/cross-account-service-role/*
           - Action:
-              - 'route53:ChangeResourceRecordSets'
-              - 'route53:ListResourceRecordSets'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'route53:GetChange'
-              - 'route53:GetHostedZone'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'lambda:AddPermission'
-              - 'lambda:CreateFunction'
-              - 'lambda:DeleteFunction'
-              - 'lambda:GetFunction'
-              - 'lambda:GetFunctionConfiguration'
-              - 'lambda:ListTags'
-              - 'lambda:RemovePermission'
-              - 'lambda:TagResource'
-              - 'lambda:UntagResource'
-              - 'lambda:UpdateFunction'
-              - 'lambda:UpdateFunctionCode'
-              - 'lambda:UpdateFunctionConfiguration'
+              - iam:PassRole
             Effect: Allow
             Resource:
-              - '*'
-          - Action:
-              - 'logs:CreateLogGroup'
-              - 'logs:DeleteLogGroup'
-              - 'logs:DeleteMetricFilter'
-              - 'logs:DeleteRetentionPolicy'
-              - 'logs:DeleteSubscriptionFilter'
-              - 'logs:DescribeLogGroups'
-              - 'logs:DescribeMetricFilters'
-              - 'logs:DescribeSubscriptionFilters'
-              - 'logs:FilterLogEvents'
-              - 'logs:ListTagsLogGroup'
-              - 'logs:PutMetricFilter'
-              - 'logs:PutRetentionPolicy'
-              - 'logs:PutSubscriptionFilter'
-              - 'logs:TagLogGroup'
-              - 'logs:UntagLogGroup'
-            Effect: Allow
-            Resource:
-              - '*'
-          - Action:
-              - 'events:DeleteRule'
-              - 'events:DescribeRule'
-              - 'events:DisableRule'
-              - 'events:EnableRule'
-              - 'events:PutRule'
-              - 'events:RemoveTargets'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'cloudwatch:*Alarms*'
-            Effect: Allow
-            Resource: '*'
-          - Action:
-              - 'iam:AttachRolePolicy'
-              - 'iam:CreateRole'
-              - 'iam:CreateServiceLinkedRole'
-              - 'iam:DeleteRole'
-              - 'iam:DeleteServiceLinkedRole'
-              - 'iam:DetachRolePolicy'
-              - 'iam:GetRole'
-              - 'iam:ListAttachedRolePolicies'
-              - 'iam:ListPolicyVersions'
-              - 'iam:ListRoleTags'
-              - 'iam:TagRole'
-              - 'iam:UntagRole'
-              - 'iam:UpdateRole'
-              - 'iam:UpdateRoleDescription'
-            Effect: Allow
-            Resource:
-              - '*'
-          - Action:
-              - 'iam:CreatePolicy'
-              - 'iam:DeletePolicy'
-              - 'iam:GetPolicy'
-              - 'iam:ListEntitiesForPolicy'
-            Effect: Allow
-            Resource:
-              - '*'
-          - Action: 'cloudformation:*'
-            Effect: Allow
-            Resource: '*'
+              - arn:aws:iam::*:role/cross-account-service-role/*
+      ManagedPolicyName: CrossAccount-CreateCodeBuild
+      Roles:
+        - !Ref CrossAccountCreateCodeBuildRole
+
 Outputs:
-  CrossAccountCloudFormationRoleArn:
-    Description: The ARN for the cloud formation role.
-    Value: !GetAtt CrossAccountCloudFormationRole.Arn
+  CrossAccountCloudFormationPolicyBuilderRoleArn:
+    Description: The ARN for the cloud formation policy builder role.
+    Value: !GetAtt CrossAccountCloudFormationPolicyBuilderRole.Arn
   CrossAccountCodePipelineRoleArn:
     Description: The code pipeline cloud formation role.
     Value: !GetAtt CrossAccountCodePipelineRole.Arn

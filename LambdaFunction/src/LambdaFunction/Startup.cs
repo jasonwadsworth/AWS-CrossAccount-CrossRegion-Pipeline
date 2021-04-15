@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
@@ -44,7 +45,11 @@ namespace LambdaFunction
         {
             services.AddLogging();
 
-            services.AddMvc().SetCompatibilityVersion(CompatibilityVersion.Version_2_1);
+            services
+                .AddMvc(options =>
+                {
+                    options.EnableEndpointRouting = false;
+                });
         }
 
         /// <summary>
@@ -52,7 +57,7 @@ namespace LambdaFunction
         /// </summary>
         /// <param name="app">The app builder.</param>
         /// <param name="env">The hosting environment.</param>
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env)
+        public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
             // health check - before authentication
             app.Map("/api/health", (appBuilder) => appBuilder.Run(context =>

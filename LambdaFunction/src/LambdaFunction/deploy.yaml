@@ -20,7 +20,7 @@ Resources:
         S3Bucket: !Ref BucketName
         S3Key: !Ref ObjectKey
       Handler: 'LambdaFunction::LambdaFunction.LambdaEntryPoint::FunctionHandlerAsync'
-      Runtime: dotnetcore2.1
+      Runtime: dotnetcore3.1
       MemorySize: 512
       Timeout: 15
       Role: !GetAtt Role.Arn

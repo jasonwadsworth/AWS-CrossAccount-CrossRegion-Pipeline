@@ -245,8 +245,9 @@ Resources:
           - Effect: Allow
             Action:
               - logs:*LogGroup
+              - logs:*RetentionPolicy
             Resource:
-              - !Sub arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*
+              - !Sub arn:${AWS::Partition}:logs:*:${AWS::AccountId}:log-group:/aws/codebuild/*
           - Action:
               - sts:AssumeRole
             Effect: Allow

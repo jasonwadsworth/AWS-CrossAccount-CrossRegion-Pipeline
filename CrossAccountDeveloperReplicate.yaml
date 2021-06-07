@@ -358,7 +358,7 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt ReplicationRole.Arn
-      Runtime: nodejs10.x
+      Runtime: nodejs12.x
       Timeout: 30
 
   # Basic permissions to allow the replication function to be triggered by the build bucket.
@@ -419,9 +419,9 @@ Resources:
   ApplyBucketNotificationFunction:
     Type: AWS::Lambda::Function
     Properties:
-      Description: Dummy function, just logs the received event
+      Description: This function is used as a custom resource to add a bucket notification to an S3 bucket.
       Handler: index.handler
-      Runtime: python2.7
+      Runtime: python3.8
       Role: !GetAtt 'ApplyNotificationFunctionRole.Arn'
       Timeout: 240
       Code:

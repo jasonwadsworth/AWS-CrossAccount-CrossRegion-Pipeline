@@ -19,10 +19,6 @@ Metadata:
           - ArtifactRegions
           - ArtifactBuckets
           - ArtifactKMSKeys
-      - Label:
-          default: Pipeline information
-        Parameters:
-          - DeveloperAccount
 
 Parameters:
   GitHubUrl:
@@ -46,68 +42,10 @@ Parameters:
   ArtifactRegions:
     Type: CommaDelimitedList
     Description: The comma separated of artifact regions.
-  DeveloperAccount:
-    Type: String
-    AllowedValues:
-      - true
-      - false
-    Default: true
-    Description: Is this pipeline for a developer account?
   ManualApprovalNames:
     Type: CommaDelimitedList
     Description: The comma separated list of names (from the names parameter) that should include a manual approval in the pipeline.
-Conditions:
-  IsDeveloperAccount:
-    Fn::Equals:
-      - true
-      - !Ref DeveloperAccount
 Resources:
-  CodeBuildLogGroup:
-    Type: AWS::Logs::LogGroup
-    Properties:
-      LogGroupName: /aws/codebuild/ExampleProject-Test
-      RetentionInDays: 3
-
-  CodeBuildProject:
-    Type: 'AWS::CodeBuild::Project'
-    Properties:
-      Description: Continuous integration build for ExampleProject
-      Name: ExampleProject-Test
-      Artifacts:
-        Type: S3
-        Packaging: ZIP
-        Location: !ImportValue BuildBucket
-        Name: ExampleProject-Test.zip # it is important that this name is NOT the same as the other build because that one will kick off a deploy
-        OverrideArtifactName: false
-        Path: ExampleProject
-      SecondaryArtifacts:
-        - ArtifactIdentifier: LambdaFunction
-          Type: S3
-          Packaging: ZIP
-          Location: !ImportValue BuildBucket
-          Name: ExampleProject.LambdaFunction-Test.zip # it is important that this name is NOT the same as the other build because that one will be used in a deploy
-          OverrideArtifactName: false
-          Path: ExampleProject/LambdaFunction
-      ServiceRole: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodeBuild
-      Environment:
-        Type: LINUX_CONTAINER
-        Image: 'aws/codebuild/dot-net:core-2.1'
-        PrivilegedMode: true
-        ComputeType: BUILD_GENERAL1_SMALL
-      Triggers:
-        Webhook:
-          Fn::If:
-            - IsDeveloperAccount
-            - false
-            - true
-      Source:
-        Auth:
-          Type: OAUTH
-        Type: GITHUB
-        BuildSpec: buildspec.yml
-        Location: !Ref GitHubUrl
-        ReportBuildStatus: true
-
   CodeBuildDeployLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -141,19 +79,12 @@ Resources:
         PrivilegedMode: true
         ComputeType: BUILD_GENERAL1_SMALL
       Triggers:
-        Webhook:
-          Fn::If:
-            - IsDeveloperAccount
-            - false
-            - true
+        Webhook: true
         FilterGroups:
-          Fn::If:
-            - IsDeveloperAccount
-            - !Ref AWS::NoValue
-            - - - Type: EVENT
-                  Pattern: PUSH
-                - Type: HEAD_REF
-                  Pattern: ^refs/heads/master$
+          - - Type: EVENT
+              Pattern: PUSH
+            - Type: HEAD_REF
+              Pattern: ^refs/heads/master$
       Source:
         Auth:
           Type: OAUTH
@@ -218,83 +149,6 @@ Resources:
                 - Name: LambdaOutput
               RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-PipelineSource
               RunOrder: 1
-        - Name: PreDeploy
-          Actions:
-            - Name: CreateUpdatePipelineChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: '1'
-              Configuration:
-                ChangeSetName: DeployChangeSet
-                ActionMode: CHANGE_SET_REPLACE
-                StackName: ExampleProject-Pipeline
-                Capabilities: CAPABILITY_NAMED_IAM
-                TemplatePath: 'PrimaryOutput::ExampleProjectPipelineSimple.yaml'
-                ParameterOverrides:
-                  Fn::Sub:
-                    - |
-                      {
-                        "Accounts": "${Accounts}",
-                        "ArtifactBuckets": "${ArtifactBuckets}",
-                        "ArtifactKMSKeys": "${ArtifactKMSKeys}",
-                        "ArtifactRegions": "${ArtifactRegions}",
-                        "DeveloperAccount": "${DeveloperAccount}",
-                        "GitHubUrl": "${GitHubUrl}",
-                        "ManualApprovalNames": "${ManualApprovalNames}",
-                        "Names": "${Names}",
-                        "Regions": "${Regions}"
-                      }
-                    - Accounts:
-                        Fn::Join:
-                          - ','
-                          - !Ref Accounts
-                      ArtifactBuckets:
-                        Fn::Join:
-                          - ','
-                          - !Ref ArtifactBuckets
-                      ArtifactKMSKeys:
-                        Fn::Join:
-                          - ','
-                          - !Ref ArtifactKMSKeys
-                      ArtifactRegions:
-                        Fn::Join:
-                          - ','
-                          - !Ref ArtifactRegions
-                      ManualApprovalNames:
-                        Fn::Join:
-                          - ','
-                          - !Ref ManualApprovalNames
-                      Names:
-                        Fn::Join:
-                          - ','
-                          - !Ref Names
-                      Regions:
-                        Fn::Join:
-                          - ','
-                          - !Ref Regions
-                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
-              InputArtifacts:
-                - Name: PrimaryOutput
-              Region: !Ref AWS::Region
-              RunOrder: 1
-              RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline'
-            - Name: ExecuteUpdatePipelineChangeSet
-              ActionTypeId:
-                Category: Deploy
-                Owner: AWS
-                Provider: CloudFormation
-                Version: '1'
-              Configuration:
-                ChangeSetName: DeployChangeSet
-                ActionMode: CHANGE_SET_EXECUTE
-                StackName: ExampleProject-Pipeline
-                Capabilities: CAPABILITY_NAMED_IAM
-                RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-UpdatePipeline'
-              Region: !Ref AWS::Region
-              RunOrder: 2
-              RoleArn: !Sub 'arn:aws:iam::${AWS::AccountId}:role/cross-account-service-role/CrossAccount-CodePipeline'
         - Name: Deploy
           Actions:
             - Name: Init-DeployPermissions

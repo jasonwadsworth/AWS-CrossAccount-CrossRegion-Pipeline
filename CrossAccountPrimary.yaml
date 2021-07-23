@@ -161,6 +161,7 @@ Resources:
               - '*'
           - Action:
               - logs:*LogGroup
+              - logs:PutRetentionPolicy
             Effect: Allow
             Resource:
               - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/codebuild/*

@@ -31,6 +31,8 @@ Resources:
             Resource:
               - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-PipelineHelperMacroFunction
               - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-PipelineHelperMacroFunction:*
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-PipelineHelper2MacroFunction
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CrossAccount-PipelineHelper2MacroFunction:*
 
   PipelineHelperMacroFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -132,10 +134,129 @@ Resources:
       Runtime: nodejs12.x
       Timeout: 30
 
+  PipelineHelper2MacroFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /aws/lambda/CrossAccount-PipelineHelper2MacroFunction
+      RetentionInDays: 3
+
+  PipelineHelper2MacroFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: |
+          const AWS = require('aws-sdk')
+
+          exports.handler = async function main(event, context) {
+            console.info(JSON.stringify(event));
+
+            const accounts = event.params.Accounts || event.templateParameterValues.Accounts;
+            const regions = event.params.Regions || event.templateParameterValues.Regions;
+            const names = event.params.Names || event.templateParameterValues.Names;
+            const manualApprovalNames = event.params.ManualApprovalNames;
+            const approvalNotificationArn = event.params.ApprovalNotificationArn;
+            const artifactBuckets = event.params.ArtifactBuckets || event.templateParameterValues.ArtifactBuckets;
+            const artifactKMSKeys = event.params.ArtifactKMSKeys || event.templateParameterValues.ArtifactKMSKeys;
+            const artifactRegions = event.params.ArtifactRegions || event.templateParameterValues.ArtifactRegions;
+
+            const fragment = event.fragment;
+            const stages = fragment.Properties.Stages;
+
+            if (artifactRegions) {
+              const artifactStores = [];
+              for (var i = 0; i < artifactRegions.length; i++) {
+                artifactStores.push({
+                  ArtifactStore: {
+                    Location: artifactBuckets[i],
+                    Type: 'S3',
+                    EncryptionKey: {
+                      Id: artifactKMSKeys[i],
+                      Type: 'KMS'
+                    }
+                  },
+                  Region: artifactRegions[i]
+                });
+              }
+
+              fragment.Properties.ArtifactStores = artifactStores;
+            }
+
+            const stageDuplications = JSON.parse(event.params.StageDuplications);
+            for (const stageDuplication of stageDuplications || []) {
+              const stageIndex = stages.findIndex(s => s.Name === stageDuplication.stage);
+
+              for (const wave of stageDuplication.waves) {
+                const stage = {
+                  Name: `${stageDuplication.stage}-${wave.name}`,
+                  Actions: []
+                }
+
+                const actionsString = JSON.stringify(stages[stageIndex].Actions);
+
+                for (const environment of wave.environments) {
+                  const actions = JSON.parse(actionsString.replace(/{ACCOUNT_ID}/g, environment.account).replace(/{REGION}/g, environment.region).replace(/{NAME}/g, environment.name));
+                  for (const action of actions) {
+                    action.Name = `${action.Name}-${environment.name}`
+                  }
+
+                  stage.Actions.push(...actions);
+                }
+
+                if (wave.manualApproval) {
+                  const approvalAction = {
+                    Name: `${wave.name}-Approval`,
+                    ActionTypeId: {
+                      Category: 'Approval',
+                      Owner: 'AWS',
+                      Provider: 'Manual',
+                      Version: '1'
+                    },
+                    Configuration: {
+                      CustomData: `${fragment.Properties.Name} ${wave.name} Deployment`,
+                      NotificationArn: approvalNotificationArn
+                    },
+                    RunOrder: 1
+                  };
+
+                  stage.Actions.splice(0, 0, approvalAction);
+                }
+
+                stages.splice(stageIndex + i, 0, stage);
+              }
+
+              // remove the stage template
+              stages.splice(stageIndex, 1)
+            }
+
+            fragment.Properties.Stages = stages;
+
+            console.info(JSON.stringify(fragment));
+
+            return {
+                requestId: event.requestId,
+                status: 'success',
+                fragment: fragment
+            }
+          }
+
+      Description: Replicates a stage of a pipeline for based on the stage duplication config
+      FunctionName: CrossAccount-PipelineHelper2MacroFunction
+      Handler: index.handler
+      MemorySize: 128
+      Role: !GetAtt PipelineHelperMacroFunctionRole.Arn
+      Runtime: nodejs12.x
+      Timeout: 30
+
   PipelineHelperMacroLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: /jasonwadsworth/CrossAccount-PipelineHelperMacro
+      RetentionInDays: 3
+
+  PipelineHelper2MacroLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /jasonwadsworth/CrossAccount-PipelineHelper2Macro
       RetentionInDays: 3
 
   PipelineHelperMacroRole:
@@ -169,6 +290,8 @@ Resources:
             Resource:
               - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/jasonwadsworth/CrossAccount-PipelineHelperMacro
               - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/jasonwadsworth/CrossAccount-PipelineHelperMacro:*
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/jasonwadsworth/CrossAccount-PipelineHelper2Macro
+              - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/jasonwadsworth/CrossAccount-PipelineHelper2Macro:*
 
   PipelineHelperMacro:
     Type: AWS::CloudFormation::Macro
@@ -177,6 +300,15 @@ Resources:
       Description: Replicates a stage of a pipeline for each environment in the list
       FunctionName: !GetAtt PipelineHelperMacroFunction.Arn
       LogGroupName: /jasonwadsworth/CrossAccount-PipelineHelperMacro
+      LogRoleARN: !GetAtt PipelineHelperMacroRole.Arn
+
+  PipelineHelper2Macro:
+    Type: AWS::CloudFormation::Macro
+    Properties:
+      Name: CrossAccount-PipelineHelper2Macro
+      Description: Replicates a stage of a pipeline based on the stage duplication config
+      FunctionName: !GetAtt PipelineHelper2MacroFunction.Arn
+      LogGroupName: /jasonwadsworth/CrossAccount-PipelineHelper2Macro
       LogRoleARN: !GetAtt PipelineHelperMacroRole.Arn
 
   CrossAccountPipelineHelperMacroInvokePolicy:
@@ -193,5 +325,6 @@ Resources:
             Effect: Allow
             Resource:
               - !GetAtt PipelineHelperMacroFunction.Arn
+              - !GetAtt PipelineHelper2MacroFunction.Arn
       Roles:
         - CrossAccount-UpdatePipeline

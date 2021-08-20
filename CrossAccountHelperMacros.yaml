@@ -26,6 +26,11 @@ Resources:
         Statement:
           - Effect: Allow
             Action:
+              - ssm:GetParameter
+            Resource:
+              - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/cross-account-pipeline-helper/*
+          - Effect: Allow
+            Action:
               - logs:CreateLogStream
               - logs:PutLogEvents
             Resource:
@@ -150,10 +155,7 @@ Resources:
           exports.handler = async function main(event, context) {
             console.info(JSON.stringify(event));
 
-            const accounts = event.params.Accounts || event.templateParameterValues.Accounts;
-            const regions = event.params.Regions || event.templateParameterValues.Regions;
-            const names = event.params.Names || event.templateParameterValues.Names;
-            const manualApprovalNames = event.params.ManualApprovalNames;
+            const configParameterName = event.params.ConfigParameterName || event.templateParameterValues.ConfigParameterName;
             const approvalNotificationArn = event.params.ApprovalNotificationArn;
             const artifactBuckets = event.params.ArtifactBuckets || event.templateParameterValues.ArtifactBuckets;
             const artifactKMSKeys = event.params.ArtifactKMSKeys || event.templateParameterValues.ArtifactKMSKeys;
@@ -181,7 +183,9 @@ Resources:
               fragment.Properties.ArtifactStores = artifactStores;
             }
 
-            const stageDuplications = JSON.parse(event.params.StageDuplications);
+            const ssm = new AWS.SSM();
+            const param = await ssm.getParameter({ Name: configParameterName }).promise();
+            const stageDuplications = JSON.parse(param.Parameter.Value);
             for (const stageDuplication of stageDuplications || []) {
               const stageIndex = stages.findIndex(s => s.Name === stageDuplication.stage);
 

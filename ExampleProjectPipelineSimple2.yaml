@@ -12,7 +12,7 @@ Metadata:
       - Label:
           default: Stage Duplication Config
         Parameters:
-          - StageDuplications
+          - ConfigParameterName
 
 Parameters:
   ArtifactBuckets:
@@ -24,9 +24,9 @@ Parameters:
   ArtifactRegions:
     Type: CommaDelimitedList
     Description: The comma separated of artifact regions.
-  StageDuplications:
+  ConfigParameterName:
     Type: String
-    Description: The JSON of the stage duplication config
+    Description: The name of the SSM parameter store parameter with the JSON of the stage duplication config. Name must start with /cross-account-pipeline-helper/
 Resources:
   Pipeline:
     Metadata:
@@ -42,7 +42,7 @@ Resources:
         ArtifactKMSKeys: !Ref ArtifactKMSKeys
         ArtifactRegions: !Ref ArtifactRegions
         ApprovalNotificationArn: !Sub arn:aws:sns:${AWS::Region}:${AWS::AccountId}:PipelineManualIntervention
-        StageDuplications: !Ref StageDuplications
+        ConfigParameterName: !Ref ConfigParameterName
 
     Type: AWS::CodePipeline::Pipeline
     Properties:

@@ -62,9 +62,11 @@ Once the primary stack, and any regional stacks, are completed you will need to 
 
 ## Helper Macros
 
-In order to make building your pipelines a little easier I've included a macro function that will take care of duplicating stages as well as taking care of the artificts stores. To use the macro you'll need to create a stack using `CrossAccountHelperMacros.yaml` in the account and region of the pipelines (the primary region).
+In order to make building your pipelines a little easier I've included a couple of macro functions that will take care of duplicating stages as well as taking care of the artificts stores. To use the macros you'll need to create a stack using `CrossAccountHelperMacros.yaml` in the account and region of the pipelines (the primary region).
 
-To use the macro you add the following to your pipeline resource (see `ExampleProjectPipelineSimple.yaml` for an example):
+### PipelineHelper Macro
+
+To use this macro you add the following to your pipeline resource (see `ExampleProjectPipelineSimple.yaml` for an example):
 
 ```
     Fn::Transform:
@@ -98,6 +100,87 @@ To use the macro you add the following to your pipeline resource (see `ExamplePr
 - _DuplicateStages_: Array of the stages to duplicate. Each stage in the array will result in one stage for each name above.
 
 That is all that is needed to create a pipeline that is cross account/cross region. For an example pipeline that uses the values above please look at the `ExampleProjectPipelineSimple.yaml`.
+
+### PipelineHelper2 Macro
+
+This macro allows you to configure your Pipeline stages to run "waves", or collections of environments in parallel. For example, say you have a dev environment, two testing environments and two production environments. With this macro you can deploy the dev by itself, the two test environments in parallel, followed by the two production environments in parallel. To configure this there is a JSON object that you'll place in SSM Parameter Store and reference in the configuration. The parameter name must begin with `/cross-account-pipeline-helper/` in order for the macro to have access to it.
+
+To use this macro you add the following to your pipeline resource (see `ExampleProjectPipelineSimple2.yaml` for an example):
+
+```
+    Fn::Transform:
+      Name: CrossAccount-PipelineHelper2Macro
+      Parameters:
+        ArtifactBuckets:
+            - String
+        ArtifactKMSKeys:
+            - String
+        ApprovalNotificationArn: String
+        ConfigParameterName: String
+```
+
+- _ArtifactBuckets_: Array of artifact buckets. This value can be omitted if you have a stack parameter by the same name. The order of the buckets must match the order of the artifact regions.
+- _ArtifactKMSKeys_: Array of artifact KMS key ARNs. This value can be omitted if you have a stack parameter by the same name. The order of the ARNs must match the order of the artifact regions.
+- _ArtifactRegions_: Array of artifact buckets. This value can be omitted if you have a stack parameter by the same name.
+- _ApprovalNotificationArn_: The ARN of the approval SNS topic.
+- _ConfigParameterName_: The name of the SSM Parameter Store parameter that holds the configuration JSON
+
+NOTE: you must include an artifact region, and related bucket and key, for any region that is included in your deployment configuration.
+
+The JSON has the following structure:
+
+```json
+[
+    {
+        "stage": "Deploy", // the stage in your CodePipeline template that you want to duplicate
+        "waves": [ // a wave is a collection of environments that can be deployed in parallel
+            {
+                "name": "Development", // the name of the wave - this will be added to the stage name
+                "manualApproval": false, // optional, defaults to false - setting to true will add a manual intervention step at the front of the wave
+                "environments": [ // the environments to include in the wave
+                    {
+                        "name": "dev",             // the name of the environment - this will be used to replace anything with {NAME} in the stage
+                        "account": "123000321000", // the account of the environment - this will be used to replace anything with {ACCOUNT_ID} in the stage
+                        "region": "us-west-2"      // the region of the environment - this will be used to replace anything with {REGION} in the stage
+                    }
+                ]
+            },
+            {
+                "name": "Test",
+                "manualApproval": true,
+                "environments": [
+                    {
+                        "name": "qa1",
+                        "account": "143000341000",
+                        "region": "us-west-2"
+                    },
+                    {
+                        "name": "qa2",
+                        "account": "341000143000",
+                        "region": "ap-southeast-1"
+                    }
+                ]
+            },
+            {
+                "name": "Production",
+                "manualApproval": true,
+                "environments": [
+                    {
+                        "name": "prod",
+                        "account": "062820050000",
+                        "region": "us-west-2"
+                    },
+                    {
+                        "name": "apac",
+                        "account": "000006282005",
+                        "region": "ap-southeast-1"
+                    }
+                ]
+            }
+        ]
+    }
+]
+```
 
 ---
 ## Developer Account

@@ -189,6 +189,7 @@ Resources:
             for (const stageDuplication of stageDuplications || []) {
               const stageIndex = stages.findIndex(s => s.Name === stageDuplication.stage);
 
+              let count = 1;
               for (const wave of stageDuplication.waves) {
                 const stage = {
                   Name: `${stageDuplication.stage}-${wave.name}`,
@@ -225,7 +226,8 @@ Resources:
                   stage.Actions.splice(0, 0, approvalAction);
                 }
 
-                stages.splice(stageIndex + i, 0, stage);
+                stages.splice(stageIndex + count, 0, stage);
+                count++;
               }
 
               // remove the stage template

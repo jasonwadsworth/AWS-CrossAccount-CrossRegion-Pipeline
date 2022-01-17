@@ -137,6 +137,7 @@ Resources:
               - codepipeline:DeleteWebhook
               - codepipeline:DeregisterWebhookWithThirdParty
               - codepipeline:GetPipeline
+              - codepipeline:GetPipelineState
               - codepipeline:ListActionTypes
               - codepipeline:ListPipelines
               - codepipeline:ListTagsForResource

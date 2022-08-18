@@ -136,7 +136,7 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt PipelineHelperMacroFunctionRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs16.x
       Timeout: 30
 
   PipelineHelper2MacroFunctionLogGroup:
@@ -250,7 +250,7 @@ Resources:
       Handler: index.handler
       MemorySize: 128
       Role: !GetAtt PipelineHelperMacroFunctionRole.Arn
-      Runtime: nodejs12.x
+      Runtime: nodejs16.x
       Timeout: 30
 
   PipelineHelperMacroLogGroup:

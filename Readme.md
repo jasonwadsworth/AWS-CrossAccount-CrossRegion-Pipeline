@@ -66,7 +66,7 @@ In order to make building your pipelines a little easier I've included a couple 
 
 ### PipelineHelper Macro
 
-To use this macro you add the following to your pipeline resource (see `ExampleProjectPipelineSimple.yaml` for an example):
+To use this macro you add the following to your pipeline resource:
 
 ```
     Fn::Transform:
@@ -99,13 +99,13 @@ To use this macro you add the following to your pipeline resource (see `ExampleP
 - _ApprovalNotificationArn_: The ARN of the approval SNS topic.
 - _DuplicateStages_: Array of the stages to duplicate. Each stage in the array will result in one stage for each name above.
 
-That is all that is needed to create a pipeline that is cross account/cross region. For an example pipeline that uses the values above please look at the `ExampleProjectPipelineSimple.yaml`.
+That is all that is needed to create a pipeline that is cross account/cross region.
 
 ### PipelineHelper2 Macro
 
 This macro allows you to configure your Pipeline stages to run "waves", or collections of environments in parallel. For example, say you have a dev environment, two testing environments and two production environments. With this macro you can deploy the dev by itself, the two test environments in parallel, followed by the two production environments in parallel. To configure this there is a JSON object that you'll place in SSM Parameter Store and reference in the configuration. The parameter name must begin with `/cross-account-pipeline-helper/` in order for the macro to have access to it.
 
-To use this macro you add the following to your pipeline resource (see `ExampleProjectPipelineSimple2.yaml` for an example):
+To use this macro you add the following to your pipeline resource:
 
 ```
     Fn::Transform:
@@ -208,12 +208,3 @@ Once your developer stack is done you'll need to create a stack using `CrossAcco
 You'll also need to create the macro stack if you are using that. See above for more info.
 
 Once this is done you will have a bucket that gets data both from your account's builds and the "real" build account's builds. This will keep your account in sync at all times, while allowing you to test on a private branches.
-
-## Final Thoughts
-
-Use the `ExampleProjectPipelineSimple.yaml` file as your baseline for building pipelines. There is one important element to this template that, left out, could cause builds to run on every developer's account. You'll notice the `Fn::If` statements on the builds. These are used to turn off the automatic webhooks for the developer accounts. If you are all using the same repository this is imporant. If you are using forks, where each developer is forking the main repository, they you can treat your account as though it is NOT a developer account.
-
-
-Note On GitHub
-----------------
-The ExampleProject project uses a GitHub hook for CodeBuild. This hook uses an OAuth connection to AWS, so no GitHub credentials are stored in AWS. In order to configure this you'll need to go to the CodeBuild page and start the process of creating a build project. Follow the directions in [this article](https://www.itonaut.com/2018/06/18/use-github-source-in-aws-codebuild-project-using-aws-cloudformation/) for direction of what you need to do (just the last part of the article).
